@@ -1,3 +1,5 @@
+mod csvql;
+
 use clap::Parser;
 
 #[derive(Parser, Debug, Clone)]

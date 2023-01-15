@@ -9,3 +9,4 @@ license = "BSD-3-Clause"
 
 [dependencies]
 clap = { version="3.1", features=["derive"] }
+nom = "7.1"
