@@ -1,3 +1,2 @@
 
-struct Query {
-}
+struct _Query {}
