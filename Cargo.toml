@@ -1,0 +1,11 @@
+[package]
+name = "csvql"
+version = "0.1.0"
+edition = "2021"
+description = "A query engine for CSV data"
+repository = "https://github.com/bww/csvql"
+readme = "README.md"
+license = "BSD-3-Clause"
+
+[dependencies]
+clap = { version="3.1", features=["derive"] }
