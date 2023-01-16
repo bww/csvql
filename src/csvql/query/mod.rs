@@ -3,13 +3,13 @@ use std::io::Read;
 use csv;
 
 #[derive(Debug, Clone)]
-struct Query<R: Read> {
+pub struct Query<R: Read> {
   sources: Vec<Source<R>>,
-  selectors: Vec<Selector<R>>,
+  selectors: Vec<Selector>,
 }
 
 impl<R: Read> Query<R> {
-  fn new(sources: Vec<Source<R>>, selectors: Vec<Selector<R>>) -> Query<R> {
+  pub fn new(sources: Vec<Source<R>>, selectors: Vec<Selector>) -> Query<R> {
     Query{
       sources: sources,
       selectors: selectors,
@@ -18,18 +18,31 @@ impl<R: Read> Query<R> {
 }
 
 #[derive(Debug, Clone)]
-struct Source<R: Read> {
+pub struct Source<R: Read> {
   name: String,
   data: Frame<R>,
 }
 
+impl<R: Read> Source<R> {
+  pub fn new_with_data(name: &str, data: R) -> Source<R> {
+    Source{
+      name: name.to_owned(),
+      data: Frame::new(data),
+    }
+  }
+  
+  pub fn name<'a>(&'a self) -> &'a str {
+    &self.name
+  }
+}
+
 #[derive(Debug, Clone)]
-struct Frame<R: Read> {
+pub struct Frame<R: Read> {
   data: R,
 }
 
 impl<R: Read> Frame<R> {
-  fn new<'a>(data: &'a mut R) -> Frame<&'a mut R> {
+  pub fn new(data: R) -> Frame<R> {
     Frame{
       data: data,
     }
@@ -41,13 +54,31 @@ impl<R: Read> Frame<R> {
 }
 
 #[derive(Debug, Clone)]
-struct Selector<R: Read> {
-  columns: Vec<Column<R>>,
+pub struct Selector {
+  columns: Vec<Column>,
+}
+
+impl Selector {
+  pub fn new_with_column(column: Column) -> Selector {
+    Selector{
+      columns: vec![column],
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
-struct Column<R: Read> {
-  source: Source<R>,
-  column: String,
+pub struct Column {
+  alias: String,
+  name: String,
   index: u32,
+}
+
+impl Column {
+  pub fn new(alias: &str, name: &str, index: u32) -> Column {
+    Column{
+      alias: alias.to_owned(),
+      name: name.to_owned(),
+      index: index,
+    }
+  }
 }
