@@ -34,14 +34,14 @@ fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
   println!("Hello, world! {:?}", opts);
   
-  let mut srcs: Vec<query::Source<query::InputFrame<Box<dyn io::Read>>>> = Vec::new();
+  let mut srcs: Vec<query::Source<query::frame::Csv<Box<dyn io::Read>>>> = Vec::new();
   for s in &opts.docs {
     let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
       ("stdin", Box::new(io::stdin()))
     }else{
       (&s, Box::new(fs::OpenOptions::new().open(&s)?))
     };
-    srcs.push(query::Source::new_with_data(name, query::InputFrame::new(input)));
+    srcs.push(query::Source::new_with_data(name, query::frame::Csv::new(input)));
   }
   
   let mut sels: Vec<query::Selector> = Vec::new();

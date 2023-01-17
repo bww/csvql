@@ -1,29 +1,6 @@
-use std::io::Read;
+pub mod frame;
 
-use csv;
-
-pub trait Frame {
-  fn rows(&mut self);
-}
-
-#[derive(Debug, Clone)]
-pub struct InputFrame<R: Read> {
-  data: R,
-}
-
-impl<R: Read> InputFrame<R> {
-  pub fn new(data: R) -> InputFrame<R> {
-    InputFrame{
-      data: data,
-    }
-  }
-}
-
-impl<R: Read> Frame for InputFrame<R> {
-  fn rows(&mut self) {
-    let _ = csv::Reader::from_reader(&mut self.data).records();
-  }
-}
+use frame::Frame;
 
 #[derive(Debug, Clone)]
 pub struct Query<F: Frame> {
