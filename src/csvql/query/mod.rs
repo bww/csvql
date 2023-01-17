@@ -36,18 +36,24 @@ impl<R: Read> Source<R> {
   }
 }
 
+pub trait Frame {
+  fn rows();
+}
+
 #[derive(Debug, Clone)]
-pub struct Frame<R: Read> {
+pub struct InputFrame<R: Read> {
   data: R,
 }
 
-impl<R: Read> Frame<R> {
-  pub fn new(data: R) -> Frame<R> {
-    Frame{
+impl<R: Read> InputFrame<R> {
+  pub fn new(data: R) -> InputFrame<R> {
+    InputFrame{
       data: data,
     }
   }
-  
+}
+
+impl<R: Read> Frame for InputFrame<R> {
   fn rows(&mut self) {
     let _ = csv::Reader::from_reader(&mut self.data).records();
   }
