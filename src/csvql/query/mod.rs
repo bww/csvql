@@ -2,42 +2,8 @@ use std::io::Read;
 
 use csv;
 
-#[derive(Debug, Clone)]
-pub struct Query<R: Read> {
-  sources: Vec<Source<R>>,
-  selectors: Vec<Selector>,
-}
-
-impl<R: Read> Query<R> {
-  pub fn new(sources: Vec<Source<R>>, selectors: Vec<Selector>) -> Query<R> {
-    Query{
-      sources: sources,
-      selectors: selectors,
-    }
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct Source<R: Read> {
-  name: String,
-  data: Frame<R>,
-}
-
-impl<R: Read> Source<R> {
-  pub fn new_with_data(name: &str, data: R) -> Source<R> {
-    Source{
-      name: name.to_owned(),
-      data: Frame::new(data),
-    }
-  }
-  
-  pub fn name<'a>(&'a self) -> &'a str {
-    &self.name
-  }
-}
-
 pub trait Frame {
-  fn rows();
+  fn rows(&mut self);
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +22,40 @@ impl<R: Read> InputFrame<R> {
 impl<R: Read> Frame for InputFrame<R> {
   fn rows(&mut self) {
     let _ = csv::Reader::from_reader(&mut self.data).records();
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct Query<F: Frame> {
+  sources: Vec<Source<F>>,
+  selectors: Vec<Selector>,
+}
+
+impl<F: Frame> Query<F> {
+  pub fn new(sources: Vec<Source<F>>, selectors: Vec<Selector>) -> Query<F> {
+    Query{
+      sources: sources,
+      selectors: selectors,
+    }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct Source<F: Frame> {
+  name: String,
+  data: F,
+}
+
+impl<F: Frame> Source<F> {
+  pub fn new_with_data(name: &str, data: F) -> Source<F> {
+    Source{
+      name: name.to_owned(),
+      data: data,
+    }
+  }
+  
+  pub fn name<'a>(&'a self) -> &'a str {
+    &self.name
   }
 }
 
