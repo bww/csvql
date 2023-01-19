@@ -8,6 +8,7 @@ use std::process;
 use clap::Parser;
 
 use csvql::query;
+use crate::csvql::query::frame::Frame; // temp
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -42,6 +43,14 @@ fn cmd() -> Result<(), error::Error> {
       (&s, Box::new(fs::OpenOptions::new().open(&s)?))
     };
     srcs.push(query::Source::new_with_data(name, query::frame::Csv::new(input)));
+  }
+  
+  for s in &srcs {
+    let mut s = &mut s;
+    for r in s.data().rows::<Box<dyn io::Read>>() {
+      let r = r?;
+      println!(">>> {:?}", r);
+    }
   }
   
   let mut sels: Vec<query::Selector> = Vec::new();

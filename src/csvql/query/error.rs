@@ -1,12 +1,12 @@
 use std::io;
 use std::fmt;
 
-use crate::csvql::query;
+use csv;
 
 #[derive(Debug)]
 pub enum Error {
   IOError(io::Error),
-  QueryError(query::error::Error),
+  CsvError(csv::Error),
 }
 
 impl From<io::Error> for Error {
@@ -15,9 +15,9 @@ impl From<io::Error> for Error {
   }
 }
 
-impl From<query::error::Error> for Error {
-  fn from(err: query::error::Error) -> Self {
-    Self::QueryError(err)
+impl From<csv::Error> for Error {
+  fn from(err: csv::Error) -> Self {
+    Self::CsvError(err)
   }
 }
 
@@ -25,7 +25,7 @@ impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::IOError(err) => err.fmt(f),
-      Self::QueryError(err) => err.fmt(f),
+      Self::CsvError(err) => err.fmt(f),
     }
   }
 }

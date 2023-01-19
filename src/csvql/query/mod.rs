@@ -1,4 +1,5 @@
 pub mod frame;
+pub mod error;
 
 use frame::Frame;
 
@@ -33,6 +34,10 @@ impl<F: Frame> Source<F> {
   
   pub fn name<'a>(&'a self) -> &'a str {
     &self.name
+  }
+  
+  pub fn data<'a>(&'a self) -> &'a F {
+    &self.data
   }
 }
 
