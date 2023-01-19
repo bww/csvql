@@ -40,17 +40,13 @@ fn cmd() -> Result<(), error::Error> {
     let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
       ("stdin", Box::new(io::stdin()))
     }else{
-      (&s, Box::new(fs::OpenOptions::new().open(&s)?))
+      (&s, Box::new(fs::File::open(&s)?))
     };
-    srcs.push(query::Source::new_with_data(name, query::frame::Csv::new(input)));
-  }
-  
-  for s in &srcs {
-    let mut s = &mut s;
-    for r in s.data().rows::<Box<dyn io::Read>>() {
-      let r = r?;
+    let mut f = query::frame::Csv::new(input);
+    for r in &mut f.rows::<Box<dyn io::Read>>() {
       println!(">>> {:?}", r);
     }
+    srcs.push(query::Source::new_with_data(name, f));
   }
   
   let mut sels: Vec<query::Selector> = Vec::new();
