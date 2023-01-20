@@ -37,7 +37,7 @@ impl<R: io::Read> Csv<R> {
   pub fn new(name: &str, data: R) -> Csv<R> {
     Csv{
       name: name.to_owned(),
-      data: csv::ReaderBuilder::new().has_headers(true).from_reader(data),
+      data: csv::ReaderBuilder::new().has_headers(false).from_reader(data),
     }
   }
 }

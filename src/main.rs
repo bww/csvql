@@ -53,7 +53,6 @@ fn cmd() -> Result<(), error::Error> {
   }
   
   if let Some(mut frm) = frm {
-    println!(">>> {:?}", frm.cols());
     for r in frm.rows() {
       let r = r?;
       let pos = r.position().expect("a record position");
