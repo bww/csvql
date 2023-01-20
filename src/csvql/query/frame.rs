@@ -5,38 +5,75 @@ use csv;
 
 use crate::csvql::query::error::Error;
 
+fn convert_record(e: csv::Result<csv::StringRecord>) -> Result<csv::StringRecord, Error> {
+  match e {
+    Ok(v)    => Ok(v),
+    Err(err) => Err(err.into()),
+  }
+}
+
 pub trait Frame {
-  fn rows<'a, R: io::Read>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a>;
+  fn name<'a>(&'a self) -> &str;
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a>;
+}
+
+impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
+  fn name<'a>(&'a self) -> &str {
+    (**self).name()
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+    (**self).rows()
+  }
 }
 
 #[derive(Debug)]
 pub struct Csv<R: io::Read> {
+  name: String,
   data: csv::Reader<R>,
 }
 
 impl<R: io::Read> Csv<R> {
-  pub fn new(data: R) -> Csv<R> {
+  pub fn new(name: &str, data: R) -> Csv<R> {
     Csv{
-      data: csv::Reader::from_reader(data),
+      name: name.to_owned(),
+      data: csv::ReaderBuilder::new().has_headers(true).from_reader(data),
     }
   }
 }
 
-// impl<R: io::Read> Iterator for Csv<R> {
-//   type Item = &str;
-//   fn next(&mut self) -> Option<Self::Item> {
-//     Box::new(csv::Reader::from_reader(&mut self.data).records())
-//   }
-// }
-
 impl<R: io::Read> Frame for Csv<R> {
-  fn rows<'a, S: io::Read>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
-    Box::new(self.data.records().map(|e| {
-      match e {
-        Ok(v)    => Ok(v),
-        Err(err) => Err(err.into()),
-      }
-    }))
+  fn name<'a>(&'a self) -> &str {
+    &self.name
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+    Box::new(self.data.records().map(|e| { convert_record(e) }))
+  }
+}
+
+#[derive(Debug)]
+pub struct Concat<A: Frame, B: Frame> {
+  first: A,
+  second: B,
+}
+
+impl<A: Frame, B: Frame> Concat<A, B> {
+  pub fn new(first: A, second: B) -> Concat<A, B> {
+    Concat{
+      first: first,
+      second: second,
+    }
+  }
+}
+
+impl<L: Frame, R: Frame> Frame for Concat<L, R> {
+  fn name<'a>(&'a self) -> &str {
+    self.first.name()
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+    Box::new( self.first.rows().chain(self.second.rows()))
   }
 }
 

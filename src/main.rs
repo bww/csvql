@@ -8,7 +8,7 @@ use std::process;
 use clap::Parser;
 
 use csvql::query;
-use crate::csvql::query::frame::Frame; // temp
+use csvql::query::frame::Frame;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -35,26 +35,33 @@ fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
   println!("Hello, world! {:?}", opts);
   
-  let mut srcs: Vec<query::Source<query::frame::Csv<Box<dyn io::Read>>>> = Vec::new();
+  let mut frm: Option<Box<dyn Frame>> = None;
+  let mut sels: Vec<query::Selector> = Vec::new();
   for s in &opts.docs {
     let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
-      ("stdin", Box::new(io::stdin()))
+      ("-", Box::new(io::stdin()))
     }else{
       (&s, Box::new(fs::File::open(&s)?))
     };
-    let mut f = query::frame::Csv::new(input);
-    for r in &mut f.rows::<Box<dyn io::Read>>() {
-      println!(">>> {:?}", r);
+    let src = query::frame::Csv::new(&s, input);
+    if let Some(opt) = frm {
+      frm = Some(Box::new(query::frame::Concat::new(opt, src)));
+    }else{
+      frm = Some(Box::new(src));
     }
-    srcs.push(query::Source::new_with_data(name, f));
+    sels.push(query::Selector::new_with_column(query::Column::new(&s, "hi", 1)));
   }
   
-  let mut sels: Vec<query::Selector> = Vec::new();
-  for s in &srcs {
-    sels.push(query::Selector::new_with_column(query::Column::new(s.name(), "hi", 1)));
+  if let Some(mut frm) = frm {
+    println!(">>> {:?}", frm.cols());
+    for r in frm.rows() {
+      let r = r?;
+      let pos = r.position().expect("a record position");
+      println!(">>> {} {:?}", pos.line(), r);
+    }
   }
   
-  let query = query::Query::new(srcs, sels);
+  // let mut query = query::Query::new(srcs, sels);
   
   Ok(())
 }
