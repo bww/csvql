@@ -12,6 +12,7 @@ fn convert_record(e: csv::Result<csv::StringRecord>) -> Result<csv::StringRecord
   }
 }
 
+// A frame of data
 pub trait Frame {
   fn name<'a>(&'a self) -> &str;
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a>;
@@ -27,11 +28,13 @@ impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
   }
 }
 
-pub trait Index: Frame { // buffered frame indexed on a particular column
+// A random-access frame indexed on a particular column
+pub trait Index: Frame {
   fn index<'a>(&'a self) -> &'a str; // the indexed column
   fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, Error>;
 }
 
+// A CSV input frame
 #[derive(Debug)]
 pub struct Csv<R: io::Read> {
   name: String,
@@ -57,6 +60,7 @@ impl<R: io::Read> Frame for Csv<R> {
   }
 }
 
+// A frame that concatenates the output of two other frames
 #[derive(Debug)]
 pub struct Concat<A: Frame, B: Frame> {
   first: A,
@@ -82,23 +86,20 @@ impl<L: Frame, R: Frame> Frame for Concat<L, R> {
   }
 }
 
-// #[derive(Debug, Clone)]
-// pub struct Join<L: Frame, R: Frame> {
-//   left:  L,
-//   right: R,
-// }
+// A frame that left-joins two frames on an indexed column
+#[derive(Debug)]
+pub struct Join<L: Frame, R: Index> {
+  on: String,
+  left:  L,
+  right: R,
+}
 
-// impl<L: Frame, R: Frame> Join<L, R> {
-//   pub fn new(left: L, right: R) -> Join<L, R> {
-//     Join{
-//       left: left,
-//       right: right,
-//     }
-//   }
-// }
-
-// impl<L: Frame, R: Frame> Frame for Join<L, R> {
-//   fn rows(&mut self) {
-//     // ...
-//   }
-// }
+impl<L: Frame, R: Index> Frame for Join<L, R> {
+  fn name<'a>(&'a self) -> &str {
+    self.left.name()
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+    Box::new( self.left.rows().chain(self.right.rows()))
+  }
+}
