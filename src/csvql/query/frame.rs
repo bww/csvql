@@ -27,6 +27,11 @@ impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
   }
 }
 
+pub trait Index: Frame { // buffered frame indexed on a particular column
+  fn index<'a>(&'a self) -> &'a str; // the indexed column
+  fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, Error>;
+}
+
 #[derive(Debug)]
 pub struct Csv<R: io::Read> {
   name: String,
