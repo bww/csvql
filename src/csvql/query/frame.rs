@@ -1,4 +1,5 @@
 use std::io;
+use std::fmt;
 use core::iter;
 
 use csv;
@@ -57,6 +58,12 @@ impl<R: io::Read> Frame for Csv<R> {
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
     Box::new(self.data.records().map(|e| { convert_record(e) }))
+  }
+}
+
+impl<R: io::Read> fmt::Display for Csv<R> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.name)
   }
 }
 

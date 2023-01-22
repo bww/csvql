@@ -8,6 +8,7 @@ use std::process;
 use clap::Parser;
 
 use csvql::query;
+use csvql::query::select;
 use csvql::query::frame::Frame;
 
 #[derive(Parser, Debug, Clone)]
@@ -17,6 +18,8 @@ pub struct Options {
   pub debug: bool,
   #[clap(long)]
   pub verbose: bool,
+  #[clap(long, help="Select columns")]
+  pub select: Vec<String>,
   #[clap(help="Document to open")]
   pub docs: Vec<String>,
 }
@@ -36,22 +39,24 @@ fn cmd() -> Result<(), error::Error> {
   println!("Hello, world! {:?}", opts);
   
   let mut frms: Vec<query::frame::Csv<Box<dyn io::Read>>> = Vec::new();
-  let mut sels: Vec<query::Selector> = Vec::new();
   for s in &opts.docs {
     let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
       ("-", Box::new(io::stdin()))
     }else{
       (&s, Box::new(fs::File::open(&s)?))
     };
-    frms.push(query::frame::Csv::new(&s, input));
-    sels.push(query::Selector::new_with_column(query::Column::new(&s, 1)));
+    frms.push(query::frame::Csv::new(&name, input));
+  }
+  
+  let mut sels: Vec<select::Column> = Vec::new();
+  for s in &opts.select {
+    sels.push(query::Selector::new_with_column(query::Column::parse(&s)?));
   }
   
   for frm in frms.iter_mut() {
     println!(">>> {}", frm);
     // if let Some(mut frm) = frm {
       for r in frm.rows() {
-        let r = r?;
         let pos = r.position().expect("a record position");
         println!(">>> {} {:?}", pos.line(), r);
       }

@@ -1,4 +1,5 @@
 pub mod frame;
+pub mod select;
 pub mod error;
 
 use frame::Frame;
@@ -6,14 +7,15 @@ use frame::Frame;
 #[derive(Debug, Clone)]
 pub struct Query<F: Frame> {
   sources: Vec<Source<F>>,
-  selectors: Vec<Selector>,
+  // selectors: Vec<Selector>,
 }
 
 impl<F: Frame> Query<F> {
-  pub fn new(sources: Vec<Source<F>>, selectors: Vec<Selector>) -> Query<F> {
+  // pub fn new(sources: Vec<Source<F>>, selectors: Vec<Selector>) -> Query<F> {
+  pub fn new(sources: Vec<Source<F>>) -> Query<F> {
     Query{
       sources: sources,
-      selectors: selectors,
+      // selectors: selectors,
     }
   }
 }
@@ -38,47 +40,5 @@ impl<F: Frame> Source<F> {
   
   pub fn data<'a>(&'a self) -> &'a F {
     &self.data
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct Selector {
-  columns: Vec<Column>,
-}
-
-impl Selector {
-  pub fn new_with_column(column: Column) -> Selector {
-    Selector{
-      columns: vec![column],
-    }
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct Column {
-  from: String,
-  name: String,
-  index: usize,
-}
-
-impl Column {
-  pub fn new(from: &str, name: &str, index: usize) -> Column {
-    Column{
-      from: from.to_owned(),
-      name: name.to_owned(),
-      index: index,
-    }
-  }
-  
-  pub fn from<'a>(&'a self) &'a str {
-    &self.from
-  }
-  
-  pub fn name<'a>(&'a self) &'a str {
-    &self.name
-  }
-  
-  pub fn index<'a>(&'a self) usize {
-    self.index
   }
 }
