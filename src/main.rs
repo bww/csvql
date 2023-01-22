@@ -57,14 +57,12 @@ fn cmd() -> Result<(), error::Error> {
   let mut dst = csv::Writer::from_writer(io::stdout());
   let sel = select::Join::new_with_columns(cols);
   for frm in frms.iter_mut() {
-    println!(">>> {}", frm);
     let mut it = frm.rows();
     let schema = if let Some(hdrs) = it.next() {
       select::Schema::new_from_headers(&hdrs?)
     }else{
       break;
     };
-    println!("--> {}", &schema);
     for r in it {
       let r = sel.select(&schema, &r?)?;
       dst.write_record(&r)?;
