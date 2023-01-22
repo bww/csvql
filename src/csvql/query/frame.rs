@@ -1,6 +1,8 @@
+use core::iter;
+
 use std::io;
 use std::fmt;
-use core::iter;
+use std::collections::BTreeMap;
 
 use csv;
 
@@ -33,6 +35,46 @@ impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
 pub trait Index: Frame {
   fn on<'a>(&'a self) -> &'a str; // the indexed column
   fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, Error>;
+}
+
+// A btree indexed frame
+#[derive(Debug)]
+pub struct BTreeIndex {
+  name: String,
+  on: String,
+  data: BTreeMap<String, csv::StringRecord>,
+}
+
+impl BTreeIndex {
+  pub fn new(name: &str, on: &str, source: &dyn Frame) -> Result<BTreeIndex, Error> {
+    let data: BTreeMap<String, csv::StringRecord> = BTreeMap::new();
+    BTreeIndex{
+      name: name.to_owned(),
+      on: on.to_owned(),
+      data: Self::index(source)?,
+    }
+  }
+  
+  fn index(source: &dyn Frame) -> Result<BTreeMap<String, csv::StringRecord>, Error> {
+    let data BTreeMap<String, csv::StringRecord> = BTreeMap::new();
+    data
+  }
+}
+
+impl Frame for BTreeIndex {
+  fn name<'a>(&'a self) -> &str {
+    &self.name
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+    Box::new(self.data.records().map(|e| { convert_record(e) }))
+  }
+}
+
+impl<R: io::Read> fmt::Display for BTreeIndex {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.name)
+  }
 }
 
 // A CSV input frame
