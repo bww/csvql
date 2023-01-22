@@ -8,8 +8,9 @@ use std::process;
 use clap::Parser;
 
 use csvql::query;
-use csvql::query::select;
 use csvql::query::frame::Frame;
+use csvql::query::select;
+use csvql::query::select::Selector;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -48,19 +49,25 @@ fn cmd() -> Result<(), error::Error> {
     frms.push(query::frame::Csv::new(&name, input));
   }
   
-  let mut sels: Vec<select::Column> = Vec::new();
+  let mut cols: Vec<select::Column> = Vec::new();
   for s in &opts.select {
-    sels.push(query::Selector::new_with_column(query::Column::parse(&s)?));
+    cols.push(select::Column::parse(&s)?);
   }
   
+  let sel = select::Join::new_with_columns(cols);
   for frm in frms.iter_mut() {
     println!(">>> {}", frm);
-    // if let Some(mut frm) = frm {
-      for r in frm.rows() {
-        let pos = r.position().expect("a record position");
-        println!(">>> {} {:?}", pos.line(), r);
-      }
-    // }
+    let mut it = frm.rows();
+    let schema = if let Some(hdrs) = it.next() {
+      select::Schema::new_from_headers(&hdrs?)
+    }else{
+      break;
+    };
+    for r in it {
+      let r = sel.select(&schema, &r?)?;
+      // let pos = r.position().expect("a record position");
+      println!(">>> {:?}", r);
+    }
   }
   
   // let mut query = query::Query::new(srcs, sels);
