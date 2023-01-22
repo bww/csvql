@@ -37,7 +37,6 @@ fn main() {
 
 fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
-  println!("Hello, world! {:?}", opts);
   
   let mut frms: Vec<query::frame::Csv<Box<dyn io::Read>>> = Vec::new();
   for s in &opts.docs {
@@ -59,7 +58,10 @@ fn cmd() -> Result<(), error::Error> {
   for frm in frms.iter_mut() {
     let mut it = frm.rows();
     let schema = if let Some(hdrs) = it.next() {
-      select::Schema::new_from_headers(&hdrs?)
+      let hdrs = hdrs?;
+      let schema = select::Schema::new_from_headers(&hdrs);
+      dst.write_record(&sel.select(&schema, &hdrs)?)?;
+      schema
     }else{
       break;
     };

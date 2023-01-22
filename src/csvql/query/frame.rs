@@ -31,7 +31,7 @@ impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
 
 // A random-access frame indexed on a particular column
 pub trait Index: Frame {
-  fn index<'a>(&'a self) -> &'a str; // the indexed column
+  fn on<'a>(&'a self) -> &'a str; // the indexed column
   fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, Error>;
 }
 
