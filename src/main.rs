@@ -35,7 +35,7 @@ fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
   println!("Hello, world! {:?}", opts);
   
-  let mut frm: Option<Box<dyn Frame>> = None;
+  let mut frms: Vec<query::frame::Csv<Box<dyn io::Read>>> = Vec::new();
   let mut sels: Vec<query::Selector> = Vec::new();
   for s in &opts.docs {
     let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
@@ -43,21 +43,18 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       (&s, Box::new(fs::File::open(&s)?))
     };
-    let src = query::frame::Csv::new(&s, input);
-    if let Some(opt) = frm {
-      frm = Some(Box::new(query::frame::Concat::new(opt, src)));
-    }else{
-      frm = Some(Box::new(src));
-    }
-    sels.push(query::Selector::new_with_column(query::Column::new(&s, "hi", 1)));
+    frms.push(query::frame::Csv::new(&s, input));
+    sels.push(query::Selector::new_with_column(query::Column::new(&char::from_u32('a' as u32 + frms.len() as u32).expect("character").to_string(), &s, 1)));
   }
   
-  if let Some(mut frm) = frm {
-    for r in frm.rows() {
-      let r = r?;
-      let pos = r.position().expect("a record position");
-      println!(">>> {} {:?}", pos.line(), r);
-    }
+  for frm in frms.iter_mut() {
+    // if let Some(mut frm) = frm {
+      for r in frm.rows() {
+        let r = r?;
+        let pos = r.position().expect("a record position");
+        println!(">>> {} {:?}", pos.line(), r);
+      }
+    // }
   }
   
   // let mut query = query::Query::new(srcs, sels);
