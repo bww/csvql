@@ -54,6 +54,7 @@ fn cmd() -> Result<(), error::Error> {
     cols.push(select::Column::parse(&s)?);
   }
   
+  let mut dst = csv::Writer::from_writer(io::stdout());
   let sel = select::Join::new_with_columns(cols);
   for frm in frms.iter_mut() {
     println!(">>> {}", frm);
@@ -63,14 +64,13 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       break;
     };
+    println!("--> {}", &schema);
     for r in it {
       let r = sel.select(&schema, &r?)?;
-      // let pos = r.position().expect("a record position");
-      println!(">>> {:?}", r);
+      dst.write_record(&r)?;
     }
   }
   
-  // let mut query = query::Query::new(srcs, sels);
-  
+  dst.flush()?;
   Ok(())
 }

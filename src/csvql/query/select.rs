@@ -30,6 +30,21 @@ impl Schema {
   }
 }
 
+impl fmt::Display for Schema {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let mut dsc = String::new();
+    let mut n = 0;
+    for key in self.cols.keys() {
+      if n > 0 {
+        dsc.push_str(", ");
+      }
+      dsc.push_str(&key);
+      n += 1;
+    }
+    write!(f, "columns: {}", dsc)
+  }
+}
+
 // A data selector
 pub trait Selector {
   fn select(&self, schema: &Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error>;
