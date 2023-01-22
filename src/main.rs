@@ -44,10 +44,11 @@ fn cmd() -> Result<(), error::Error> {
       (&s, Box::new(fs::File::open(&s)?))
     };
     frms.push(query::frame::Csv::new(&s, input));
-    sels.push(query::Selector::new_with_column(query::Column::new(&char::from_u32('a' as u32 + frms.len() as u32).expect("character").to_string(), &s, 1)));
+    sels.push(query::Selector::new_with_column(query::Column::new(&s, 1)));
   }
   
   for frm in frms.iter_mut() {
+    println!(">>> {}", frm);
     // if let Some(mut frm) = frm {
       for r in frm.rows() {
         let r = r?;

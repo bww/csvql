@@ -56,17 +56,29 @@ impl Selector {
 
 #[derive(Debug, Clone)]
 pub struct Column {
-  alias: String,
+  from: String,
   name: String,
-  index: u32,
+  index: usize,
 }
 
 impl Column {
-  pub fn new(alias: &str, name: &str, index: u32) -> Column {
+  pub fn new(from: &str, name: &str, index: usize) -> Column {
     Column{
-      alias: alias.to_owned(),
+      from: from.to_owned(),
       name: name.to_owned(),
       index: index,
     }
+  }
+  
+  pub fn from<'a>(&'a self) &'a str {
+    &self.from
+  }
+  
+  pub fn name<'a>(&'a self) &'a str {
+    &self.name
+  }
+  
+  pub fn index<'a>(&'a self) usize {
+    self.index
   }
 }
