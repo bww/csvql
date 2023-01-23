@@ -119,6 +119,7 @@ impl BTreeIndex {
       Some(index) => index,
       None => return Err(error::FrameError::new("Index column not found").into()),
     };
+    
     for row in it {
       let row = row?;
       match row.get(index) {
@@ -242,21 +243,38 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
-    Box::new(self.left.rows().map(|row| {
+    let mut it = self.left.rows();
+    let schema = if let Some(hdrs) = it.next() {
+      match hdrs {
+        Ok(hdrs) => Schema::new_from_headers(&hdrs),
+        Err(err) => return Box::new(vec![Err(err)].into()),
+      }
+    }else{
+      return Box::new(vec![].into()); // empty source
+    };
+    
+    let index = match schema.index(&self.on) {
+      Some(index) => index,
+      None => return Err(error::FrameError::new("Index column not found").into()),
+    };
+    
+    Box::new(it.map(|row| {
       let mut res: Vec<String> = Vec::new();
       for field in &row? {
         res.push(field.to_owned()); // can we avoid this?
       }
       
-      match self.right.get(&self.on) {
-        Ok(row) => for field in row {
-          res.push(field.to_owned()); // can we avoid this?
-        },
-        Err(err) => match err {
-          error::Error::NotFoundError => {}, // not found, do nothing, no join
-          err => return Err(err),
-        },
-      };
+      if let Some(field) = row.get(index) {
+        match self.right.get(&field) {
+          Ok(row) => for field in row {
+            res.push(field.to_owned()); // can we avoid this?
+          },
+          Err(err) => match err {
+            error::Error::NotFoundError => println!(">>> NOT FOUND: {}={}", &self.on, &field), // not found, do nothing, no join
+            err => return Err(err),
+          },
+        };
+      }
       
       Ok(res.into())
     }))
