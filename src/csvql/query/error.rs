@@ -47,6 +47,7 @@ pub enum Error {
   CsvError(csv::Error),
   ParseError(ParseError),
   FrameError(FrameError),
+  NotFoundError,
 }
 
 impl From<io::Error> for Error {
@@ -80,6 +81,7 @@ impl fmt::Display for Error {
       Self::CsvError(err) => err.fmt(f),
       Self::ParseError(err) => err.fmt(f),
       Self::FrameError(err) => err.fmt(f),
+      Self::NotFoundError => write!(f, "not found"),
     }
   }
 }

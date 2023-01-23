@@ -141,6 +141,19 @@ impl Frame for BTreeIndex {
   }
 }
 
+impl Index for BTreeIndex {
+  fn on<'a>(&'a self) -> &'a str {
+    &self.on
+  }
+  
+  fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, error::Error> {
+    match self.data.get(key) {
+      Some(val) => Ok(&val),
+      None => Err(error::Error::NotFoundError.into()),
+    }
+  }
+}
+
 impl fmt::Display for BTreeIndex {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.name)
@@ -211,6 +224,16 @@ pub struct Join<L: Frame, R: Index> {
   on: String,
   left:  L,
   right: R,
+}
+
+impl<L: Frame, R: Index> Join<L, R> {
+  pub fn new(on: &str, left: L, right: R) -> Join<L, R> {
+    Join{
+      on: on.to_string(),
+      left: left,
+      right: right,
+    }
+  }
 }
 
 impl<L: Frame, R: Index> Frame for Join<L, R> {

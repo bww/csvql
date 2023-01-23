@@ -20,6 +20,8 @@ pub struct Options {
   pub debug: bool,
   #[clap(long)]
   pub verbose: bool,
+  #[clap(long, help="Join inputs on the specified column")]
+  pub join: Option<String>,
   #[clap(long, help="Select columns")]
   pub select: Vec<String>,
   #[clap(help="Document to open")]
@@ -39,20 +41,38 @@ fn main() {
 fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
   
-  let mut frms: Vec<query::frame::Csv<Box<dyn io::Read>>> = Vec::new();
+  let mut frms: Vec<Box<dyn Frame>> = Vec::new();
   for s in &opts.docs {
     let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
       ("-", Box::new(io::stdin()))
     }else{
       (&s, Box::new(fs::File::open(&s)?))
     };
-    frms.push(query::frame::Csv::new(&name, input));
+    frms.push(Box::new(query::frame::Csv::new(&name, input)));
   }
   
   let mut cols: Vec<select::Column> = Vec::new();
   for s in &opts.select {
     cols.push(select::Column::parse(&s)?);
   }
+  
+  let frms = if let Some(on) = &opts.join {
+    let mut base: Option<Box<dyn Frame>> = None;
+    for frm in frms.iter_mut() {
+      if let Some(curr) = base {
+        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(frm.name(), on, frm)?)));
+      }else{
+        base = Some(Box::new(frm));
+      }
+    }
+    if let Some(base) = base {
+      vec![base]
+    }else{
+      Vec::new()
+    }
+  }else{
+    frms
+  };
   
   let mut dst = csv::Writer::from_writer(io::stdout());
   let sel = select::Join::new_with_columns(cols);
