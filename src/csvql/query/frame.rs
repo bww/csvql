@@ -78,6 +78,16 @@ pub trait Index: Frame {
   fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, error::Error>;
 }
 
+impl<I: Index + ?Sized> Index for Box<I> { // black magic
+  fn on<'a>(&'a self) -> &'a str {
+    (**self).on()
+  }
+  
+  fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, error::Error> {
+    (**self).get(key)
+  }
+}
+
 // A btree indexed frame
 #[derive(Debug)]
 pub struct BTreeIndex {
