@@ -56,11 +56,12 @@ fn cmd() -> Result<(), error::Error> {
     cols.push(select::Column::parse(&s)?);
   }
   
-  let frms = if let Some(on) = &opts.join {
+  let mut frms = if let Some(on) = &opts.join {
     let mut base: Option<Box<dyn Frame>> = None;
-    for frm in frms.iter_mut() {
+    for mut frm in frms.into_iter() {
+      let name = frm.name().to_owned();
       if let Some(curr) = base {
-        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(frm.name(), on, frm)?)));
+        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(&name, on, &mut frm)?)));
       }else{
         base = Some(Box::new(frm));
       }

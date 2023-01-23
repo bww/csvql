@@ -242,6 +242,23 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
-    Box::new( self.left.rows().chain(self.right.rows()))
+    Box::new(self.left.rows().map(|row| {
+      let mut res: Vec<String> = Vec::new();
+      for field in row? {
+        res.push(field);
+      }
+      
+      match self.right.get(self.on) {
+        Ok(row) => for field in row? {
+          res.push(field);
+        },
+        Err(err) => match err {
+          error::Error::NotFoundError => {}, // not found, do nothing, no join
+          err => return Err(err),
+        },
+      };
+      
+      res.into()
+    }))
   }
 }
