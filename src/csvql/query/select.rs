@@ -1,57 +1,17 @@
 use std::fmt;
-use std::collections::HashMap;
 
 use csv;
 
+use crate::csvql::query::frame;
 use crate::csvql::query::error;
-
-pub struct Schema {
-  cols: HashMap<String, usize>,
-}
-
-impl Schema {
-  pub fn new_from_headers(hdrs: &csv::StringRecord) -> Schema {
-    let mut cols: HashMap<String, usize> = HashMap::new();
-    let mut n: usize = 0;
-    for hdr in hdrs {
-      cols.insert(hdr.to_string(), n);
-      n += 1;
-    }
-    Schema{
-      cols: cols,
-    }
-  }
-  
-  pub fn index(&self, name: &str) -> Option<usize> {
-    match self.cols.get(name) {
-      Some(index) => Some(*index),
-      None => None,
-    }
-  }
-}
-
-impl fmt::Display for Schema {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let mut dsc = String::new();
-    let mut n = 0;
-    for key in self.cols.keys() {
-      if n > 0 {
-        dsc.push_str(", ");
-      }
-      dsc.push_str(&key);
-      n += 1;
-    }
-    write!(f, "columns: {}", dsc)
-  }
-}
 
 // A data selector
 pub trait Selector {
-  fn select(&self, schema: &Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error>;
+  fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error>;
 }
 
 impl<S: Selector + ?Sized> Selector for Box<S> { // black magic
-  fn select(&self, schema: &Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
+  fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
     (**self).select(schema, row)
   }
 }
@@ -93,7 +53,7 @@ impl Join {
 }
 
 impl Selector for Join {
-  fn select(&self, schema: &Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
+  fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
     if self.sels.len() == 0 {
       return Ok(row.to_owned());
     }
@@ -158,7 +118,7 @@ impl Column {
 }
 
 impl Selector for Column {
-  fn select(&self, schema: &Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
+  fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
     let mut sel: Vec<String> = Vec::new();
     if let Some(index) = schema.index(&self.name) {
       if let Some(col) = row.get(index) {

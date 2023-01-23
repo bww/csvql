@@ -23,10 +23,30 @@ impl fmt::Display for ParseError {
 }
 
 #[derive(Debug)]
+pub struct FrameError {
+  message: String,
+}
+
+impl FrameError {
+  pub fn new(msg: &str) -> FrameError {
+    FrameError{
+      message: msg.to_owned(),
+    }
+  }
+}
+
+impl fmt::Display for FrameError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.message)
+  }
+}
+
+#[derive(Debug)]
 pub enum Error {
   IOError(io::Error),
   CsvError(csv::Error),
   ParseError(ParseError),
+  FrameError(FrameError),
 }
 
 impl From<io::Error> for Error {
@@ -47,12 +67,19 @@ impl From<ParseError> for Error {
   }
 }
 
+impl From<FrameError> for Error {
+  fn from(err: FrameError) -> Self {
+    Self::FrameError(err)
+  }
+}
+
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::IOError(err) => err.fmt(f),
       Self::CsvError(err) => err.fmt(f),
       Self::ParseError(err) => err.fmt(f),
+      Self::FrameError(err) => err.fmt(f),
     }
   }
 }

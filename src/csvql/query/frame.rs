@@ -2,23 +2,64 @@ use core::iter;
 
 use std::io;
 use std::fmt;
+use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use csv;
 
-use crate::csvql::query::error::Error;
+use crate::csvql::query::error;
 
-fn convert_record(e: csv::Result<csv::StringRecord>) -> Result<csv::StringRecord, Error> {
+fn convert_record(e: csv::Result<csv::StringRecord>) -> Result<csv::StringRecord, error::Error> {
   match e {
     Ok(v)    => Ok(v),
     Err(err) => Err(err.into()),
   }
 }
 
+pub struct Schema {
+  cols: HashMap<String, usize>,
+}
+
+impl Schema {
+  pub fn new_from_headers(hdrs: &csv::StringRecord) -> Schema {
+    let mut cols: HashMap<String, usize> = HashMap::new();
+    let mut n: usize = 0;
+    for hdr in hdrs {
+      cols.insert(hdr.to_string(), n);
+      n += 1;
+    }
+    Schema{
+      cols: cols,
+    }
+  }
+  
+  pub fn index(&self, name: &str) -> Option<usize> {
+    match self.cols.get(name) {
+      Some(index) => Some(*index),
+      None => None,
+    }
+  }
+}
+
+impl fmt::Display for Schema {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let mut dsc = String::new();
+    let mut n = 0;
+    for key in self.cols.keys() {
+      if n > 0 {
+        dsc.push_str(", ");
+      }
+      dsc.push_str(&key);
+      n += 1;
+    }
+    write!(f, "columns: {}", dsc)
+  }
+}
+
 // A frame of data
 pub trait Frame {
   fn name<'a>(&'a self) -> &str;
-  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a>;
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a>;
 }
 
 impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
@@ -26,7 +67,7 @@ impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
     (**self).name()
   }
   
-  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
     (**self).rows()
   }
 }
@@ -34,7 +75,7 @@ impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
 // A random-access frame indexed on a particular column
 pub trait Index: Frame {
   fn on<'a>(&'a self) -> &'a str; // the indexed column
-  fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, Error>;
+  fn get<'a>(&'a self, key: &str) -> Result<&'a csv::StringRecord, error::Error>;
 }
 
 // A btree indexed frame
@@ -46,18 +87,37 @@ pub struct BTreeIndex {
 }
 
 impl BTreeIndex {
-  pub fn new(name: &str, on: &str, source: &dyn Frame) -> Result<BTreeIndex, Error> {
-    let data: BTreeMap<String, csv::StringRecord> = BTreeMap::new();
-    BTreeIndex{
+  pub fn new(name: &str, on: &str, source: &mut dyn Frame) -> Result<BTreeIndex, error::Error> {
+    Ok(BTreeIndex{
       name: name.to_owned(),
       on: on.to_owned(),
-      data: Self::index(source)?,
-    }
+      data: Self::index(on, source)?,
+    })
   }
   
-  fn index(source: &dyn Frame) -> Result<BTreeMap<String, csv::StringRecord>, Error> {
-    let data BTreeMap<String, csv::StringRecord> = BTreeMap::new();
-    data
+  fn index(on: &str, source: &mut dyn Frame) -> Result<BTreeMap<String, csv::StringRecord>, error::Error> {
+    let mut data: BTreeMap<String, csv::StringRecord> = BTreeMap::new();
+    
+    let mut it = source.rows();
+    let schema = if let Some(hdrs) = it.next() {
+      Schema::new_from_headers(&hdrs?)
+    }else{
+      return Ok(data); // empty source
+    };
+    
+    let index = match schema.index(on) {
+      Some(index) => index,
+      None => return Err(error::FrameError::new("Index column not found").into()),
+    };
+    for row in it {
+      let row = row?;
+      match row.get(index) {
+        Some(col) => data.insert(col.to_string(), row),
+        None => /* row is omitted */ None,
+      };
+    }
+    
+    Ok(data)
   }
 }
 
@@ -66,12 +126,12 @@ impl Frame for BTreeIndex {
     &self.name
   }
   
-  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
-    Box::new(self.data.records().map(|e| { convert_record(e) }))
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+    Box::new(self.data.values().map(|e| { Ok(e.to_owned()) }))
   }
 }
 
-impl<R: io::Read> fmt::Display for BTreeIndex {
+impl fmt::Display for BTreeIndex {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.name)
   }
@@ -98,7 +158,7 @@ impl<R: io::Read> Frame for Csv<R> {
     &self.name
   }
   
-  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
     Box::new(self.data.records().map(|e| { convert_record(e) }))
   }
 }
@@ -130,7 +190,7 @@ impl<L: Frame, R: Frame> Frame for Concat<L, R> {
     self.first.name()
   }
   
-  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
     Box::new( self.first.rows().chain(self.second.rows()))
   }
 }
@@ -148,7 +208,7 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
     self.left.name()
   }
   
-  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, Error>> + 'a> {
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
     Box::new( self.left.rows().chain(self.right.rows()))
   }
 }

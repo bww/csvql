@@ -8,6 +8,7 @@ use std::process;
 use clap::Parser;
 
 use csvql::query;
+use csvql::query::frame;
 use csvql::query::frame::Frame;
 use csvql::query::select;
 use csvql::query::select::Selector;
@@ -59,7 +60,7 @@ fn cmd() -> Result<(), error::Error> {
     let mut it = frm.rows();
     let schema = if let Some(hdrs) = it.next() {
       let hdrs = hdrs?;
-      let schema = select::Schema::new_from_headers(&hdrs);
+      let schema = frame::Schema::new_from_headers(&hdrs);
       dst.write_record(&sel.select(&schema, &hdrs)?)?;
       schema
     }else{
