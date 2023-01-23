@@ -244,13 +244,13 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
     Box::new(self.left.rows().map(|row| {
       let mut res: Vec<String> = Vec::new();
-      for field in row? {
-        res.push(field);
+      for field in &row? {
+        res.push(field.to_owned()); // can we avoid this?
       }
       
-      match self.right.get(self.on) {
-        Ok(row) => for field in row? {
-          res.push(field);
+      match self.right.get(&self.on) {
+        Ok(row) => for field in row {
+          res.push(field.to_owned()); // can we avoid this?
         },
         Err(err) => match err {
           error::Error::NotFoundError => {}, // not found, do nothing, no join
@@ -258,7 +258,7 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
         },
       };
       
-      res.into()
+      Ok(res.into())
     }))
   }
 }
