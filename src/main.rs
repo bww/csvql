@@ -48,7 +48,7 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       (&s, Box::new(fs::File::open(&s)?))
     };
-    frms.push(Box::new(query::frame::Csv::new(&name, input)));
+    frms.push(Box::new(query::frame::Csv::new(&name, input)?));
   }
   
   let mut cols: Vec<select::Column> = Vec::new();
@@ -61,7 +61,7 @@ fn cmd() -> Result<(), error::Error> {
     for mut frm in frms.into_iter() {
       let name = frm.name().to_owned();
       if let Some(curr) = base {
-        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(&name, on, &mut frm)?)));
+        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(&name, on, &mut frm)?)?));
       }else{
         base = Some(Box::new(frm));
       }
