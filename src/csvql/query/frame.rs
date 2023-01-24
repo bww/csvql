@@ -1,7 +1,6 @@
-use core::iter;
-
 use std::io;
 use std::fmt;
+use std::iter;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 
@@ -52,7 +51,7 @@ impl fmt::Display for Schema {
       dsc.push_str(&key);
       n += 1;
     }
-    write!(f, "columns: {}", dsc)
+    write!(f, "{}", dsc)
   }
 }
 
@@ -243,34 +242,39 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+    let lname = self.left.name().to_string();
     let mut it = self.left.rows();
     let schema = if let Some(hdrs) = it.next() {
       match hdrs {
         Ok(hdrs) => Schema::new_from_headers(&hdrs),
-        Err(err) => return Box::new(vec![Err(err)].into()),
+        Err(err) => return Box::new(iter::once(Err(err))),
       }
     }else{
-      return Box::new(vec![].into()); // empty source
+      return Box::new(iter::empty()); // empty source
     };
     
     let index = match schema.index(&self.on) {
       Some(index) => index,
-      None => return Err(error::FrameError::new("Index column not found").into()),
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} in {} ({})", &self.on, &lname, &schema)).into()))),
     };
     
-    Box::new(it.map(|row| {
+    let right = &self.right;
+    let on = &self.on;
+    Box::new(it.map(move |row| {
+      let row = row?;
+
       let mut res: Vec<String> = Vec::new();
-      for field in &row? {
+      for field in &row {
         res.push(field.to_owned()); // can we avoid this?
       }
       
       if let Some(field) = row.get(index) {
-        match self.right.get(&field) {
+        match right.get(&field) {
           Ok(row) => for field in row {
             res.push(field.to_owned()); // can we avoid this?
           },
           Err(err) => match err {
-            error::Error::NotFoundError => println!(">>> NOT FOUND: {}={}", &self.on, &field), // not found, do nothing, no join
+            error::Error::NotFoundError => println!(">>> NOT FOUND: {}={}", on, &field), // not found, do nothing, no join
             err => return Err(err),
           },
         };

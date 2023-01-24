@@ -76,19 +76,20 @@ fn cmd() -> Result<(), error::Error> {
   };
   
   let mut dst = csv::Writer::from_writer(io::stdout());
-  let sel = select::Join::new_with_columns(cols);
+  // let sel = select::Join::new_with_columns(cols);
   for frm in frms.iter_mut() {
     let mut it = frm.rows();
-    let schema = if let Some(hdrs) = it.next() {
-      let hdrs = hdrs?;
-      let schema = frame::Schema::new_from_headers(&hdrs);
-      dst.write_record(&sel.select(&schema, &hdrs)?)?;
-      schema
-    }else{
-      break;
-    };
+    // let schema = if let Some(hdrs) = it.next() {
+    //   let hdrs = hdrs?;
+    //   let schema = frame::Schema::new_from_headers(&hdrs);
+    //   dst.write_record(&sel.select(&schema, &hdrs)?)?;
+    //   schema
+    // }else{
+    //   break;
+    // };
     for r in it {
-      let r = sel.select(&schema, &r?)?;
+      // let r = sel.select(&schema, &r?)?;
+      let r = r?;
       dst.write_record(&r)?;
     }
   }
