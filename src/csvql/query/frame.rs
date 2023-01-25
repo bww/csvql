@@ -1,8 +1,8 @@
 use std::io;
 use std::fmt;
 use std::iter;
+use std::collections::HashSet;
 use std::collections::HashMap;
-use std::collections::hash_map::Keys;
 use std::collections::BTreeMap;
 
 use csv;
@@ -16,33 +16,89 @@ fn convert_record(e: csv::Result<csv::StringRecord>) -> Result<csv::StringRecord
   }
 }
 
+#[derive(Clone)]
 pub struct Schema {
-  cols: HashMap<String, usize>,
+  cmap: HashMap<String, usize>,
+  keys: Vec<String>,
 }
 
 impl Schema {
+  pub fn empty() -> Schema {
+    Schema{
+      cmap: HashMap::new(),
+      keys: Vec::new(),
+    }
+  }
+  
   pub fn new_from_headers(hdrs: &csv::StringRecord) -> Schema {
-    let mut cols: HashMap<String, usize> = HashMap::new();
-    let mut n: usize = 0;
+    let mut keys: Vec<String> = Vec::new();
     for hdr in hdrs {
-      cols.insert(hdr.to_string(), n);
+      keys.push(hdr.to_string());
+    }
+    
+    keys.sort();
+    
+    let mut cmap: HashMap<String, usize> = HashMap::new();
+    for (i, k) in keys.iter().enumerate() {
+      cmap.insert(k.to_string(), i);
+    }
+    
+    Schema{
+      cmap: cmap,
+      keys: keys,
+    }
+  }
+  
+  pub fn union(&self, with: &Schema) -> Schema {
+    let mut cols: HashSet<String> = HashSet::new();
+    for (k, _) in self.cmap {
+      cols.insert(k);
+    }
+    for (k, _) in with.cmap {
+      cols.insert(k);
+    }
+    
+    let mut keys: Vec<String> = Vec::new();
+    for k in cols.into_iter() {
+      keys.push(k);
+    }
+    
+    keys.sort();
+    
+    let mut cmap: HashMap<String, usize> = HashMap::new();
+    for (i, k) in keys.iter().enumerate() {
+      cmap.insert(k.to_owned(), i);
+    }
+    
+    Schema{
+      cmap: cmap,
+      keys: keys,
+    }
+  }
+  
+  pub fn columns<'a>(&'a self) -> Vec<&'a String> {
+    self.keys.iter().collect()
+  }
+  
+  pub fn description(&self, debug: bool) -> String {
+    let mut dsc = String::new();
+    let mut n = 0;
+    for key in &self.keys {
+      if n > 0 {
+        dsc.push_str(", ");
+      }
+      if debug {
+        dsc.push_str(&format!("{}={}", &key, n));
+      }else{
+        dsc.push_str(&key);
+      }
       n += 1;
     }
-    Schema{
-      cols: cols,
-    }
-  }
-  
-  pub fn add(&mut self, col: &str, index: usize) {
-    self.cols.insert(col.to_owned(), index);
-  }
-  
-  pub fn columns<'a>(&'a self) -> Keys<String, usize> {
-    self.cols.keys()
+    dsc
   }
   
   pub fn index(&self, name: &str) -> Option<usize> {
-    match self.cols.get(name) {
+    match self.cmap.get(name) {
       Some(index) => Some(*index),
       None => None,
     }
@@ -51,33 +107,30 @@ impl Schema {
 
 impl fmt::Display for Schema {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let mut dsc = String::new();
-    let mut n = 0;
-    for key in self.columns() {
-      if n > 0 {
-        dsc.push_str(", ");
-      }
-      dsc.push_str(&key);
-      n += 1;
-    }
-    write!(f, "{}", dsc)
+    write!(f, "{}", self.description(false))
+  }
+}
+
+impl fmt::Debug for Schema {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.description(true))
   }
 }
 
 // A frame of data
 pub trait Frame {
-  fn name<'a>(&'a self) -> &str;
-  fn headers<'a>(&'a self) -> Result<&csv::StringRecord, error::Error>;
+  fn name<'a>(&'a self) -> &'a str;
+  fn schema<'a>(&'a self) -> &'a Schema;
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a>;
 }
 
 impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
-  fn name<'a>(&'a self) -> &str {
+  fn name<'a>(&'a self) -> &'a str {
     (**self).name()
   }
   
-  fn headers<'a>(&'a self) -> Result<&csv::StringRecord, error::Error> {
-    (**self).headers()
+  fn schema<'a>(&'a self) -> &'a Schema {
+    (**self).schema()
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
@@ -106,19 +159,18 @@ impl<I: Index + ?Sized> Index for Box<I> { // black magic
 pub struct BTreeIndex {
   name: String,
   on: String,
-  headers: csv::StringRecord,
+  schema: Schema,
   data: BTreeMap<String, csv::StringRecord>,
 }
 
 impl BTreeIndex {
   pub fn new(name: &str, on: &str, source: &mut dyn Frame) -> Result<BTreeIndex, error::Error> {
-    let headers = source.headers()?;
-    let schema = Schema::new_from_headers(headers);
+    let schema = source.schema();
     Ok(BTreeIndex{
       name: name.to_owned(),
       on: on.to_owned(),
-      headers: headers.to_owned(),
-      data: Self::index(&schema, on, source)?,
+      schema: schema.clone(),
+      data: Self::index(schema, on, source)?,
     })
   }
   
@@ -143,12 +195,12 @@ impl BTreeIndex {
 }
 
 impl Frame for BTreeIndex {
-  fn name<'a>(&'a self) -> &str {
+  fn name<'a>(&'a self) -> &'a str {
     &self.name
   }
   
-  fn headers<'a>(&'a self) -> Result<&csv::StringRecord, error::Error> {
-    Ok(&self.headers)
+  fn schema<'a>(&'a self) -> &'a Schema {
+    &self.schema
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
@@ -179,7 +231,7 @@ impl fmt::Display for BTreeIndex {
 #[derive(Debug)]
 pub struct Csv<R: io::Read> {
   name: String,
-  headers: csv::StringRecord,
+  schema: Schema,
   data: csv::Reader<R>,
 }
 
@@ -188,19 +240,19 @@ impl<R: io::Read> Csv<R> {
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(data);
     Ok(Csv{
       name: name.to_owned(),
-      headers: reader.headers()?.to_owned(),
+      schema: Schema::new_from_headers(reader.headers()?),
       data: reader,
     })
   }
 }
 
 impl<R: io::Read> Frame for Csv<R> {
-  fn name<'a>(&'a self) -> &str {
+  fn name<'a>(&'a self) -> &'a str {
     &self.name
   }
   
-  fn headers<'a>(&'a self) -> Result<&csv::StringRecord, error::Error> {
-    Ok(&self.headers)
+  fn schema<'a>(&'a self) -> &'a Schema {
+    &self.schema
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
@@ -219,28 +271,26 @@ impl<R: io::Read> fmt::Display for Csv<R> {
 pub struct Concat<A: Frame, B: Frame> {
   first: A,
   second: B,
-  headers: csv::StringRecord,
+  schema: Schema,
 }
 
 impl<A: Frame, B: Frame> Concat<A, B> {
   pub fn new(first: A, second: B) -> Result<Concat<A, B>, error::Error> {
-    let h1 = first.headers()?.to_owned();
-    let h2 = second.headers()?.to_owned();
     Ok(Concat{
       first: first,
       second: second,
-      headers: h1.iter().chain(h2.iter()).collect::<csv::StringRecord>().into(),
+      schema: first.schema().union(second.schema()),
     })
   }
 }
 
 impl<L: Frame, R: Frame> Frame for Concat<L, R> {
-  fn name<'a>(&'a self) -> &str {
+  fn name<'a>(&'a self) -> &'a str {
     self.first.name()
   }
   
-  fn headers<'a>(&'a self) -> Result<&csv::StringRecord, error::Error> {
-    Ok(&self.headers)
+  fn schema<'a>(&'a self) -> &'a Schema {
+    &self.schema
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
@@ -254,41 +304,34 @@ pub struct Join<L: Frame, R: Index> {
   on: String,
   left: L,
   right: R,
-  headers: csv::StringRecord,
+  schema: Schema,
 }
 
 impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
-    let h1 = left.headers()?.to_owned();
-    let h2 = right.headers()?.to_owned();
     Ok(Join{
       on: on.to_string(),
       left: left,
       right: right,
-      headers: h1.iter().chain(h2.iter()).collect::<csv::StringRecord>().into()
+      schema: left.schema().union(right.schema()),
     })
   }
 }
 
 impl<L: Frame, R: Index> Frame for Join<L, R> {
-  fn name<'a>(&'a self) -> &str {
+  fn name<'a>(&'a self) -> &'a str {
     self.left.name()
   }
   
-  fn headers<'a>(&'a self) -> Result<&csv::StringRecord, error::Error> {
-    Ok(&self.headers)
+  fn schema<'a>(&'a self) -> &'a Schema {
+    &self.schema
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
     let lname = self.left.name().to_string();
-    let schema = match self.left.headers() {
-      Ok(hdrs) => Schema::new_from_headers(hdrs),
-      Err(err) => return Box::new(iter::once(Err(err))),
-    };
-    
-    let index = match schema.index(&self.on) {
+    let index = match self.schema.index(&self.on) {
       Some(index) => index,
-      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} in {} ({})", &self.on, &lname, &schema)).into()))),
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} in {} ({})", &self.on, &lname, &self.schema)).into()))),
     };
     
     let right = &self.right;
