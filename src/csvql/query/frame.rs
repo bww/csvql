@@ -51,11 +51,11 @@ impl Schema {
   
   pub fn union(&self, with: &Schema) -> Schema {
     let mut cols: HashSet<String> = HashSet::new();
-    for (k, _) in self.cmap {
-      cols.insert(k);
+    for (k, _) in &self.cmap {
+      cols.insert(k.to_owned());
     }
-    for (k, _) in with.cmap {
-      cols.insert(k);
+    for (k, _) in &with.cmap {
+      cols.insert(k.to_owned());
     }
     
     let mut keys: Vec<String> = Vec::new();
@@ -165,12 +165,13 @@ pub struct BTreeIndex {
 
 impl BTreeIndex {
   pub fn new(name: &str, on: &str, source: &mut dyn Frame) -> Result<BTreeIndex, error::Error> {
-    let schema = source.schema();
+    let schema = source.schema().clone();
+    let data = Self::index(&schema, on, source)?;
     Ok(BTreeIndex{
       name: name.to_owned(),
       on: on.to_owned(),
-      schema: schema.clone(),
-      data: Self::index(schema, on, source)?,
+      schema: schema,
+      data: data,
     })
   }
   
@@ -276,10 +277,13 @@ pub struct Concat<A: Frame, B: Frame> {
 
 impl<A: Frame, B: Frame> Concat<A, B> {
   pub fn new(first: A, second: B) -> Result<Concat<A, B>, error::Error> {
+    let s1 = first.schema();
+    let s2 = second.schema();
+    let schema = s1.union(s2);
     Ok(Concat{
       first: first,
       second: second,
-      schema: first.schema().union(second.schema()),
+      schema: schema,
     })
   }
 }
@@ -309,11 +313,14 @@ pub struct Join<L: Frame, R: Index> {
 
 impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
+    let s1 = left.schema();
+    let s2 = right.schema();
+    let schema = s1.union(s2);
     Ok(Join{
       on: on.to_string(),
       left: left,
       right: right,
-      schema: left.schema().union(right.schema()),
+      schema: schema,
     })
   }
 }
