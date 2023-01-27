@@ -361,13 +361,13 @@ pub struct Join<L: Frame, R: Index> {
 
 impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
-    let s1 = left.schema();
+    let s1 = left.schema().clone();
     let s2 = right.schema();
     let schema = s1.union(s2);
     Ok(Join{
       on: on.to_string(),
       left: left,
-      left_schema: s1.clone(),
+      left_schema: s1,
       right: right,
       join_schema: schema,
     })
