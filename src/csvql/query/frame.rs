@@ -113,6 +113,18 @@ impl Schema {
     }
   }
   
+  pub fn count(&self) -> usize {
+    self.keys.len()
+  }
+  
+  pub fn empty_values(&self) -> Vec<String> {
+    let mut empty: Vec<String> = Vec::new();
+    for i in 0..self.count() {
+      empty.push(String::new());
+    }
+    empty
+  }
+  
   pub fn get<'a>(&'a self, name: &str) -> Option<&'a QName> {
     for e in &self.keys {
       if e.name() == name {
@@ -356,19 +368,21 @@ pub struct Join<L: Frame, R: Index> {
   left: L,
   left_schema: Schema,
   right: R,
+  right_schema: Schema,
   join_schema: Schema,
 }
 
 impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
     let s1 = left.schema().clone();
-    let s2 = right.schema();
-    let schema = s1.union(s2);
+    let s2 = right.schema().clone();
+    let schema = s1.union(&s2);
     Ok(Join{
       on: on.to_string(),
       left: left,
       left_schema: s1,
       right: right,
+      right_schema: s2,
       join_schema: schema,
     })
   }
@@ -391,21 +405,22 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
     };
     
     let right = &self.right;
+    let right_schema = &self.right_schema;
     Box::new(self.left.rows().map(move |row| {
       let row = row?;
 
       let mut res: Vec<String> = Vec::new();
       for field in &row {
-        res.push(field.to_owned()); // can we avoid this?
+        res.push(field.to_owned()); // can we avoid this copy?
       }
       
       if let Some(field) = row.get(left_index) {
         match right.get(&field) {
           Ok(row) => for field in row {
-            res.push(field.to_owned()); // can we avoid this?
+            res.push(field.to_owned()); // can we avoid this copy?
           },
           Err(err) => match err {
-            error::Error::NotFoundError => println!(">>> NOT FOUND: {}={}", left_on, &field), // not found, do nothing, no join
+            error::Error::NotFoundError => res.append(&mut right_schema.empty_values()),
             err => return Err(err),
           },
         };
