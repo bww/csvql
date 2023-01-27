@@ -408,7 +408,7 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
     let right_schema = &self.right_schema;
     Box::new(self.left.rows().map(move |row| {
       let row = row?;
-
+      
       let mut res: Vec<String> = Vec::new();
       for field in &row {
         res.push(field.to_owned()); // can we avoid this copy?
