@@ -1,5 +1,6 @@
 use std::io;
 use std::fmt;
+use std::cmp;
 use std::iter;
 use std::collections::HashSet;
 use std::collections::HashMap;
@@ -120,12 +121,8 @@ impl Schema {
     self.keys.len()
   }
   
-  pub fn empty_values(&self) -> Vec<String> {
-    let mut empty: Vec<String> = Vec::new();
-    for i in 0..self.count() {
-      empty.push(String::new());
-    }
-    empty
+  pub fn empty_row(&self, adjust: i32) -> Vec<String> {
+    return Self::empty_vec((self.count() as i32 + cmp::max(-(self.count() as i32), adjust)) as usize);
   }
   
   pub fn get<'a>(&'a self, name: &str) -> Option<&'a QName> {
@@ -151,7 +148,7 @@ impl Schema {
       if debug {
         dsc.push_str(&format!("{}={}", &key, n));
       }else{
-        dsc.push_str(&key.qname());
+        dsc.push_str(&key.name());
       }
       n += 1;
     }
@@ -163,6 +160,14 @@ impl Schema {
       Some(index) => Some(*index),
       None => None,
     }
+  }
+  
+  fn empty_vec(count: usize) -> Vec<String> {
+    let mut empty: Vec<String> = Vec::new();
+    for i in 0..count {
+      empty.push(String::new());
+    }
+    empty
   }
 }
 
@@ -300,7 +305,7 @@ pub struct Csv<R: io::Read> {
 
 impl<R: io::Read> Csv<R> {
   pub fn new(name: &str, data: R) -> Result<Csv<R>, error::Error> {
-    let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(data);
+    let mut reader = csv::ReaderBuilder::new().has_headers(true).from_reader(data);
     Ok(Csv{
       name: name.to_owned(),
       schema: Schema::new(name, reader.headers()?.iter()),
@@ -378,7 +383,7 @@ pub struct Join<L: Frame, R: Index> {
 impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
     let s1 = left.schema().clone();
-    let s2 = right.schema().exclude(on);
+    let s2 = right.schema().clone();
     let schema = s1.union(&s2);
     Ok(Join{
       on: on.to_string(),
@@ -408,7 +413,13 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
     };
     
     let right = &self.right;
+    let right_on = QName::new(self.right.name(), &self.on);
     let right_schema = &self.right_schema;
+    let right_index = match self.right_schema.index(&right_on) {
+      Some(index) => index,
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &right_on, &self.right_schema)).into()))),
+    };
+    
     Box::new(self.left.rows().map(move |row| {
       let row = row?;
       
@@ -419,11 +430,13 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
       
       if let Some(field) = row.get(left_index) {
         match right.get(&field) {
-          Ok(row) => for field in row {
-            res.push(field.to_owned()); // can we avoid this copy?
+          Ok(row) => for (i, field) in row.iter().enumerate() {
+            if i != right_index {
+              res.push(field.to_owned()); // can we avoid this copy?
+            }
           },
           Err(err) => match err {
-            error::Error::NotFoundError => res.append(&mut right_schema.empty_values()),
+            error::Error::NotFoundError => res.append(&mut right_schema.empty_row(-1)),
             err => return Err(err),
           },
         };
