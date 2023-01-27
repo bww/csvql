@@ -16,10 +16,47 @@ fn convert_record(e: csv::Result<csv::StringRecord>) -> Result<csv::StringRecord
   }
 }
 
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct QName {
+  scope: String,
+  name: String,
+}
+
+impl QName {
+  pub fn new(scope: &str, name: &str) -> QName {
+    QName{
+      scope: scope.to_owned(),
+      name: name.to_owned(),
+    }
+  }
+  
+  pub fn format(scope: &str, name: &str) -> String {
+    format!("{}.{}", scope, name)
+  }
+  
+  pub fn scope<'a>(&'a self) -> &'a str {
+    &self.scope
+  }
+  
+  pub fn name<'a>(&'a self) -> &'a str {
+    &self.name
+  }
+  
+  pub fn qname(&self) -> String {
+    Self::format(&self.scope, &self.name)
+  }
+}
+
+impl fmt::Display for QName {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", &self.qname())
+  }
+}
+
 #[derive(Clone)]
 pub struct Schema {
-  cmap: HashMap<String, usize>,
-  keys: Vec<String>,
+  cmap: HashMap<QName, usize>,
+  keys: Vec<QName>,
 }
 
 impl Schema {
@@ -30,17 +67,17 @@ impl Schema {
     }
   }
   
-  pub fn new_from_headers(hdrs: &csv::StringRecord) -> Schema {
-    let mut keys: Vec<String> = Vec::new();
+  pub fn new(scope: &str, hdrs: &csv::StringRecord) -> Schema {
+    let mut keys: Vec<QName> = Vec::new();
     for hdr in hdrs {
-      keys.push(hdr.to_string());
+      keys.push(QName::new(scope, hdr));
     }
     
     keys.sort();
     
-    let mut cmap: HashMap<String, usize> = HashMap::new();
+    let mut cmap: HashMap<QName, usize> = HashMap::new();
     for (i, k) in keys.iter().enumerate() {
-      cmap.insert(k.to_string(), i);
+      cmap.insert(k.clone(), i);
     }
     
     Schema{
@@ -50,7 +87,7 @@ impl Schema {
   }
   
   pub fn union(&self, with: &Schema) -> Schema {
-    let mut cols: HashSet<String> = HashSet::new();
+    let mut cols: HashSet<QName> = HashSet::new();
     for (k, _) in &self.cmap {
       cols.insert(k.to_owned());
     }
@@ -58,16 +95,16 @@ impl Schema {
       cols.insert(k.to_owned());
     }
     
-    let mut keys: Vec<String> = Vec::new();
+    let mut keys: Vec<QName> = Vec::new();
     for k in cols.into_iter() {
       keys.push(k);
     }
     
     keys.sort();
     
-    let mut cmap: HashMap<String, usize> = HashMap::new();
+    let mut cmap: HashMap<QName, usize> = HashMap::new();
     for (i, k) in keys.iter().enumerate() {
-      cmap.insert(k.to_owned(), i);
+      cmap.insert(k.clone(), i);
     }
     
     Schema{
@@ -76,7 +113,16 @@ impl Schema {
     }
   }
   
-  pub fn columns<'a>(&'a self) -> Vec<&'a String> {
+  pub fn get<'a>(&'a self, name: &str) -> Option<&'a QName> {
+    for e in &self.keys {
+      if e.name() == name {
+        return Some(e)
+      }
+    }
+    None
+  }
+  
+  pub fn columns<'a>(&'a self) -> Vec<&'a QName> {
     self.keys.iter().collect()
   }
   
@@ -90,15 +136,15 @@ impl Schema {
       if debug {
         dsc.push_str(&format!("{}={}", &key, n));
       }else{
-        dsc.push_str(&key);
+        dsc.push_str(&key.qname());
       }
       n += 1;
     }
     dsc
   }
   
-  pub fn index(&self, name: &str) -> Option<usize> {
-    match self.cmap.get(name) {
+  pub fn index(&self, qname: &QName) -> Option<usize> {
+    match self.cmap.get(qname) {
       Some(index) => Some(*index),
       None => None,
     }
@@ -164,20 +210,21 @@ pub struct BTreeIndex {
 }
 
 impl BTreeIndex {
-  pub fn new(name: &str, on: &str, source: &mut dyn Frame) -> Result<BTreeIndex, error::Error> {
+  pub fn new(source: &mut dyn Frame, on: &str) -> Result<BTreeIndex, error::Error> {
+    let name = source.name().to_owned();
     let schema = source.schema().clone();
-    let data = Self::index(&schema, on, source)?;
+    let index_on = QName::new(&name, on);
+    let data = Self::index(&schema, &index_on, source)?;
     Ok(BTreeIndex{
-      name: name.to_owned(),
+      name: name,
       on: on.to_owned(),
       schema: schema,
       data: data,
     })
   }
   
-  fn index(schema: &Schema, on: &str, source: &mut dyn Frame) -> Result<BTreeMap<String, csv::StringRecord>, error::Error> {
+  fn index(schema: &Schema, on: &QName, source: &mut dyn Frame) -> Result<BTreeMap<String, csv::StringRecord>, error::Error> {
     let mut data: BTreeMap<String, csv::StringRecord> = BTreeMap::new();
-    
     let index = match schema.index(on) {
       Some(index) => index,
       None => return Err(error::FrameError::new("Index column not found").into()),
@@ -241,7 +288,7 @@ impl<R: io::Read> Csv<R> {
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(data);
     Ok(Csv{
       name: name.to_owned(),
-      schema: Schema::new_from_headers(reader.headers()?),
+      schema: Schema::new(name, reader.headers()?),
       data: reader,
     })
   }
@@ -307,8 +354,9 @@ impl<L: Frame, R: Frame> Frame for Concat<L, R> {
 pub struct Join<L: Frame, R: Index> {
   on: String,
   left: L,
+  left_schema: Schema,
   right: R,
-  schema: Schema,
+  join_schema: Schema,
 }
 
 impl<L: Frame, R: Index> Join<L, R> {
@@ -319,8 +367,9 @@ impl<L: Frame, R: Index> Join<L, R> {
     Ok(Join{
       on: on.to_string(),
       left: left,
+      left_schema: s1.clone(),
       right: right,
-      schema: schema,
+      join_schema: schema,
     })
   }
 }
@@ -331,18 +380,17 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
   }
   
   fn schema<'a>(&'a self) -> &'a Schema {
-    &self.schema
+    &self.join_schema
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
-    let lname = self.left.name().to_string();
-    let index = match self.schema.index(&self.on) {
+    let left_on = QName::new(self.left.name(), &self.on);
+    let left_index = match self.left_schema.index(&left_on) {
       Some(index) => index,
-      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} in {} ({})", &self.on, &lname, &self.schema)).into()))),
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &left_on, &self.left_schema)).into()))),
     };
     
     let right = &self.right;
-    let on = &self.on;
     Box::new(self.left.rows().map(move |row| {
       let row = row?;
 
@@ -351,13 +399,13 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
         res.push(field.to_owned()); // can we avoid this?
       }
       
-      if let Some(field) = row.get(index) {
+      if let Some(field) = row.get(left_index) {
         match right.get(&field) {
           Ok(row) => for field in row {
             res.push(field.to_owned()); // can we avoid this?
           },
           Err(err) => match err {
-            error::Error::NotFoundError => println!(">>> NOT FOUND: {}={}", on, &field), // not found, do nothing, no join
+            error::Error::NotFoundError => println!(">>> NOT FOUND: {}={}", left_on, &field), // not found, do nothing, no join
             err => return Err(err),
           },
         };

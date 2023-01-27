@@ -51,17 +51,17 @@ fn cmd() -> Result<(), error::Error> {
     frms.push(Box::new(query::frame::Csv::new(&name, input)?));
   }
   
-  let mut cols: Vec<select::Column> = Vec::new();
-  for s in &opts.select {
-    cols.push(select::Column::parse(&s)?);
-  }
+  // let mut cols: Vec<select::Column> = Vec::new();
+  // for s in &opts.select {
+  //   cols.push(select::Column::parse(&s)?);
+  // }
   
   let mut frms = if let Some(on) = &opts.join {
     let mut base: Option<Box<dyn Frame>> = None;
     for mut frm in frms.into_iter() {
       let name = frm.name().to_owned();
       if let Some(curr) = base {
-        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(&name, on, &mut frm)?)?));
+        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(&mut frm, on)?)?));
       }else{
         base = Some(Box::new(frm));
       }
