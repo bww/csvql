@@ -67,12 +67,11 @@ impl Schema {
     }
   }
   
-  pub fn new(scope: &str, hdrs: &csv::StringRecord) -> Schema {
-    let mut keys: Vec<QName> = Vec::new();
-    for hdr in hdrs {
-      keys.push(QName::new(scope, hdr));
-    }
-    
+  pub fn new<'a>(scope: &str, hdrs: impl iter::Iterator<Item=&'a str>) -> Schema {
+    Self::new_with_keys(hdrs.map(|e| { QName::new(scope, e) }).collect())
+  }
+  
+  fn new_with_keys<'a>(mut keys: Vec<QName>) -> Schema {
     keys.sort();
     
     let mut cmap: HashMap<QName, usize> = HashMap::new();
@@ -111,6 +110,10 @@ impl Schema {
       cmap: cmap,
       keys: keys,
     }
+  }
+  
+  pub fn exclude(&self, col: &str) -> Schema {
+    Self::new_with_keys(self.keys.iter().filter(|e| { e.name() != col }).map(|e| { e.clone() }).collect())
   }
   
   pub fn count(&self) -> usize {
@@ -300,7 +303,7 @@ impl<R: io::Read> Csv<R> {
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(data);
     Ok(Csv{
       name: name.to_owned(),
-      schema: Schema::new(name, reader.headers()?),
+      schema: Schema::new(name, reader.headers()?.iter()),
       data: reader,
     })
   }
@@ -375,7 +378,7 @@ pub struct Join<L: Frame, R: Index> {
 impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
     let s1 = left.schema().clone();
-    let s2 = right.schema().clone();
+    let s2 = right.schema().exclude(on);
     let schema = s1.union(&s2);
     Ok(Join{
       on: on.to_string(),
