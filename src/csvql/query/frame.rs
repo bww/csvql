@@ -177,7 +177,7 @@ impl fmt::Debug for Schema {
 }
 
 // A frame of data
-pub trait Frame {
+pub trait Frame: fmt::Display {
   fn name<'a>(&'a self) -> &'a str;
   fn schema<'a>(&'a self) -> &'a Schema;
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a>;
@@ -284,7 +284,7 @@ impl Index for BTreeIndex {
 
 impl fmt::Display for BTreeIndex {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}", self.name)
+    write!(f, "{}[{}]", self.name, &self.on)
   }
 }
 
@@ -362,6 +362,12 @@ impl<L: Frame, R: Frame> Frame for Concat<L, R> {
   }
 }
 
+impl<A: Frame, B: Frame> fmt::Display for Concat<A, B> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "({} + {})", &self.first, &self.second)
+  }
+}
+
 // A frame that left-joins two frames on an indexed column
 #[derive(Debug)]
 pub struct Join<L: Frame, R: Index> {
@@ -413,9 +419,9 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
       None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &right_on, &self.right_schema)).into()))),
     };
     
-    let hdrs = iter::once::<Result<csv::StringRecord, error::Error>>(
-      Ok(self.join_schema.columns().iter().map(|e| { e.name() }).collect::<Vec<&str>>().into())
-    );
+    // let hdrs = iter::once::<Result<csv::StringRecord, error::Error>>(
+    //   Ok(self.join_schema.columns().iter().map(|e| { e.name() }).collect::<Vec<&str>>().into())
+    // );
     let rows = self.left.rows().map(move |row| {
       let row = row?;
       
@@ -441,6 +447,13 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
       Ok(res.into())
     });
     
-    Box::new(hdrs.chain(rows))
+    // Box::new(hdrs.chain(rows))
+    Box::new(rows)
+  }
+}
+
+impl<L: Frame, R: Index> fmt::Display for Join<L, R> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "({} <> {})", &self.left, &self.right)
   }
 }
