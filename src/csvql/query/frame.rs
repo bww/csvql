@@ -381,9 +381,14 @@ pub struct Join<L: Frame, R: Index> {
 
 impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
+    if right.on() != on {
+      return Err(error::FrameError::new(&format!("Join index must use same column as indexed (right) frame: {}", on)).into());
+    }
+    
     let s1 = left.schema().clone();
     let s2 = right.schema().clone();
     let schema = s1.union(&s2.exclude(on));
+    
     Ok(Join{
       on: on.to_string(),
       left: left,
@@ -454,6 +459,6 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
 
 impl<L: Frame, R: Index> fmt::Display for Join<L, R> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "({} <> {})", &self.left, &self.right)
+    write!(f, "({} <> {})[{}]", &self.left, &self.right, &self.on)
   }
 }
