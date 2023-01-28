@@ -35,7 +35,7 @@ impl QName {
     format!("{}.{}", scope, name)
   }
   
-  pub fn scope<'a>(&'a self) -> &'a str {
+  pub fn _scope<'a>(&'a self) -> &'a str {
     &self.scope
   }
   
@@ -61,13 +61,6 @@ pub struct Schema {
 }
 
 impl Schema {
-  pub fn empty() -> Schema {
-    Schema{
-      cmap: HashMap::new(),
-      keys: Vec::new(),
-    }
-  }
-  
   pub fn new<'a>(scope: &str, hdrs: impl iter::Iterator<Item=&'a str>) -> Schema {
     Self::new_with_keys(hdrs.map(|e| { QName::new(scope, e) }).collect())
   }
@@ -125,7 +118,7 @@ impl Schema {
     return Self::empty_vec((self.count() as i32 + cmp::max(-(self.count() as i32), adjust)) as usize);
   }
   
-  pub fn get<'a>(&'a self, name: &str) -> Option<&'a QName> {
+  pub fn _get<'a>(&'a self, name: &str) -> Option<&'a QName> {
     for e in &self.keys {
       if e.name() == name {
         return Some(e)
@@ -164,7 +157,7 @@ impl Schema {
   
   fn empty_vec(count: usize) -> Vec<String> {
     let mut empty: Vec<String> = Vec::new();
-    for i in 0..count {
+    for _ in 0..count {
       empty.push(String::new());
     }
     empty
@@ -384,7 +377,7 @@ impl<L: Frame, R: Index> Join<L, R> {
   pub fn new(on: &str, left: L, right: R) -> Result<Join<L, R>, error::Error> {
     let s1 = left.schema().clone();
     let s2 = right.schema().clone();
-    let schema = s1.union(&s2);
+    let schema = s1.union(&s2.exclude(on));
     Ok(Join{
       on: on.to_string(),
       left: left,
@@ -420,7 +413,10 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
       None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &right_on, &self.right_schema)).into()))),
     };
     
-    Box::new(self.left.rows().map(move |row| {
+    let hdrs = iter::once::<Result<csv::StringRecord, error::Error>>(
+      Ok(self.join_schema.columns().iter().map(|e| { e.name() }).collect::<Vec<&str>>().into())
+    );
+    let rows = self.left.rows().map(move |row| {
       let row = row?;
       
       let mut res: Vec<String> = Vec::new();
@@ -443,6 +439,8 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
       }
       
       Ok(res.into())
-    }))
+    });
+    
+    Box::new(hdrs.chain(rows))
   }
 }

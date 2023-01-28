@@ -10,8 +10,8 @@ use clap::Parser;
 use csvql::query;
 use csvql::query::frame;
 use csvql::query::frame::Frame;
-use csvql::query::select;
-use csvql::query::select::Selector;
+// use csvql::query::select;
+// use csvql::query::select::Selector;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -32,7 +32,7 @@ fn main() {
   match cmd() {
     Ok(_)     => {},
     Err(err)  => {
-      println!("* * * {}", err);
+      eprintln!("* * * {}", err);
       process::exit(1);
     },
   };
@@ -59,7 +59,6 @@ fn cmd() -> Result<(), error::Error> {
   let mut frms = if let Some(on) = &opts.join {
     let mut base: Option<Box<dyn Frame>> = None;
     for mut frm in frms.into_iter() {
-      let name = frm.name().to_owned();
       if let Some(curr) = base {
         base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(&mut frm, on)?)?));
       }else{
@@ -78,7 +77,7 @@ fn cmd() -> Result<(), error::Error> {
   let mut dst = csv::Writer::from_writer(io::stdout());
   // let sel = select::Join::new_with_columns(cols);
   for frm in frms.iter_mut() {
-    let mut it = frm.rows();
+    // let mut it = frm.rows();
     // let schema = if let Some(hdrs) = it.next() {
     //   let hdrs = hdrs?;
     //   let schema = frame::Schema::new_from_headers(&hdrs);
@@ -87,7 +86,7 @@ fn cmd() -> Result<(), error::Error> {
     // }else{
     //   break;
     // };
-    for r in it {
+    for r in frm.rows() {
       // let r = sel.select(&schema, &r?)?;
       let r = r?;
       dst.write_record(&r)?;
