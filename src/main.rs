@@ -74,10 +74,12 @@ fn cmd() -> Result<(), error::Error> {
     frms
   };
   
-  let mut dst = csv::Writer::from_writer(io::stdout());
   // let sel = select::Join::new_with_columns(cols);
   for frm in frms.iter_mut() {
     eprintln!(">>> {}", frm);
+    let mut dst = csv::Writer::from_writer(io::stdout());
+    dst.write_record(frm.schema().record())?;
+    
     // let mut it = frm.rows();
     // let schema = if let Some(hdrs) = it.next() {
     //   let hdrs = hdrs?;
@@ -92,8 +94,9 @@ fn cmd() -> Result<(), error::Error> {
       let r = r?;
       dst.write_record(&r)?;
     }
+    
+    dst.flush()?;
   }
   
-  dst.flush()?;
   Ok(())
 }

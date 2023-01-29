@@ -131,6 +131,10 @@ impl Schema {
     self.keys.iter().collect()
   }
   
+  pub fn record<'a>(&'a self) -> Vec<&'a str> {
+    self.keys.iter().map(|e| { e.name() }).collect()
+  }
+  
   pub fn description(&self, debug: bool) -> String {
     let mut dsc = String::new();
     let mut n = 0;
@@ -387,7 +391,7 @@ impl<L: Frame, R: Index> Join<L, R> {
     
     let s1 = left.schema().clone();
     let s2 = right.schema().clone();
-    let schema = s1.union(&s2.exclude(on));
+    let sjoin = s1.union(&s2.exclude(on));
     
     Ok(Join{
       on: on.to_string(),
@@ -395,7 +399,7 @@ impl<L: Frame, R: Index> Join<L, R> {
       left_schema: s1,
       right: right,
       right_schema: s2,
-      join_schema: schema,
+      join_schema: sjoin,
     })
   }
 }
