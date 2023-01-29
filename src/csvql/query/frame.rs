@@ -153,8 +153,8 @@ impl Schema {
     self.keys.iter().collect()
   }
   
-  pub fn record<'a>(&'a self) -> Vec<&'a str> {
-    self.keys.iter().map(|e| { e.name() }).collect()
+  pub fn record<'a>(&'a self) -> Vec<String> {
+    self.keys.iter().map(|e| { e.qname() }).collect()
   }
   
   pub fn description(&self, debug: bool) -> String {

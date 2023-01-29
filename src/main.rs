@@ -46,7 +46,8 @@ fn cmd() -> Result<(), error::Error> {
     let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
       ("-", Box::new(io::stdin()))
     }else{
-      (&s, Box::new(fs::File::open(&s)?))
+      let (alias, path) = parse_source(&s);
+      (alias, Box::new(fs::File::open(path)?))
     };
     frms.push(Box::new(query::frame::Csv::new(&name, input)?));
   }
@@ -99,4 +100,13 @@ fn cmd() -> Result<(), error::Error> {
   }
   
   Ok(())
+}
+
+fn parse_source<'a>(f: &'a str) -> (&'a str, &'a str) {
+  let split: Vec<&'a str> = f.splitn(2, "=").collect();
+  match split.len() {
+    2 => (split[0], split[1]),
+    1 => (split[0], split[0]),
+    _ => ("", ""),
+  }
 }
