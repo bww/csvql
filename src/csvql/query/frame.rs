@@ -106,6 +106,28 @@ impl Schema {
     }
   }
   
+  pub fn join(&self, with: &Schema) -> Schema {
+    let mut keys: Vec<QName> = Vec::new();
+    for k in &self.keys {
+      keys.push(k.clone());
+    }
+    for k in &with.keys {
+      keys.push(k.clone());
+    }
+    
+    keys.sort();
+    
+    let mut cmap: HashMap<QName, usize> = HashMap::new();
+    for (i, k) in keys.iter().enumerate() {
+      cmap.insert(k.clone(), i);
+    }
+    
+    Schema{
+      cmap: cmap,
+      keys: keys,
+    }
+  }
+  
   pub fn exclude(&self, col: &str) -> Schema {
     Self::new_with_keys(self.keys.iter().filter(|e| { e.name() != col }).map(|e| { e.clone() }).collect())
   }
@@ -391,7 +413,7 @@ impl<L: Frame, R: Index> Join<L, R> {
     
     let s1 = left.schema().clone();
     let s2 = right.schema().clone();
-    let sjoin = s1.union(&s2.exclude(on));
+    let sjoin = s1.join(&s2.exclude(on));
     
     Ok(Join{
       on: on.to_string(),
@@ -428,9 +450,6 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
       None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &right_on, &self.right_schema)).into()))),
     };
     
-    // let hdrs = iter::once::<Result<csv::StringRecord, error::Error>>(
-    //   Ok(self.join_schema.columns().iter().map(|e| { e.name() }).collect::<Vec<&str>>().into())
-    // );
     let rows = self.left.rows().map(move |row| {
       let row = row?;
       
@@ -456,7 +475,6 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
       Ok(res.into())
     });
     
-    // Box::new(hdrs.chain(rows))
     Box::new(rows)
   }
 }
