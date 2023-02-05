@@ -345,7 +345,7 @@ pub struct Sorted {
   name: String,
   on: String,
   schema: Schema,
-  data: BinaryHeap<SortedRecord>,
+  data: Vec<SortedRecord>,
 }
 
 impl Sorted {
@@ -362,13 +362,13 @@ impl Sorted {
     })
   }
   
-  fn sorted(schema: &Schema, on: &QName, source: &mut dyn Frame) -> Result<BinaryHeap<SortedRecord>, error::Error> {
+  fn sorted(schema: &Schema, on: &QName, source: &mut dyn Frame) -> Result<Vec<SortedRecord>, error::Error> {
     let index = match schema.index(&on) {
       Some(index) => index,
       None => return Err(error::FrameError::new(&format!("Index column not found: {} ({})", &on, &schema)).into()),
     };
     
-    let mut data: BinaryHeap<SortedRecord> = BinaryHeap::new();
+    let mut data: Vec<SortedRecord> = Vec::new();
     for row in source.rows() {
       let row = row?;
       let on = match row.get(index) {
@@ -381,6 +381,7 @@ impl Sorted {
       });
     }
     
+    data.sort();
     Ok(data)
   }
 }
