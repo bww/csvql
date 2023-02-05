@@ -5,6 +5,7 @@ use std::iter;
 use std::collections::HashSet;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::BinaryHeap;
 
 use csv;
 
@@ -311,6 +312,96 @@ impl Index for BTreeIndex {
 impl fmt::Display for BTreeIndex {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}[{}]", self.name, &self.on)
+  }
+}
+
+#[derive(Debug, Eq)]
+struct SortedRecord {
+  on: String,
+  data: csv::StringRecord,
+}
+
+impl Ord for SortedRecord {
+  fn cmp(&self, other: &Self) -> cmp::Ordering {
+    self.on.cmp(&other.on)
+  }
+}
+
+impl PartialOrd for SortedRecord {
+  fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl PartialEq for SortedRecord {
+  fn eq(&self, other: &Self) -> bool {
+    self.on == other.on
+  }
+}
+
+// A sorted frame
+#[derive(Debug)]
+pub struct Sorted {
+  name: String,
+  on: String,
+  schema: Schema,
+  data: BinaryHeap<SortedRecord>,
+}
+
+impl Sorted {
+  pub fn new(source: &mut dyn Frame, on: &str) -> Result<Sorted, error::Error> {
+    let name = source.name().to_owned();
+    let schema = source.schema().clone();
+    let index_on = QName::new(&name, on);
+    let data = Self::sorted(&schema, &index_on, source)?;
+    Ok(Sorted{
+      name: name,
+      on: on.to_owned(),
+      schema: schema,
+      data: data,
+    })
+  }
+  
+  fn sorted(schema: &Schema, on: &QName, source: &mut dyn Frame) -> Result<BinaryHeap<SortedRecord>, error::Error> {
+    let index = match schema.index(&on) {
+      Some(index) => index,
+      None => return Err(error::FrameError::new(&format!("Index column not found: {} ({})", &on, &schema)).into()),
+    };
+    
+    let mut data: BinaryHeap<SortedRecord> = BinaryHeap::new();
+    for row in source.rows() {
+      let row = row?;
+      let on = match row.get(index) {
+        Some(on) => on,
+        None => return Err(error::FrameError::new(&format!("Index column not found: {}", index)).into()),
+      };
+      data.push(SortedRecord{
+        on: on.to_owned(),
+        data: row,
+      });
+    }
+    
+    Ok(data)
+  }
+}
+
+impl Frame for Sorted {
+  fn name<'a>(&'a self) -> &'a str {
+    &self.name
+  }
+  
+  fn schema<'a>(&'a self) -> &'a Schema {
+    &self.schema
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+    Box::new(self.data.iter().map(|e| { Ok(e.data.clone()) }))
+  }
+}
+
+impl fmt::Display for Sorted {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}{{{}}}", self.name, &self.on)
   }
 }
 

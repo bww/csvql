@@ -77,6 +77,7 @@ fn cmd() -> Result<(), error::Error> {
   
   // let sel = select::Join::new_with_columns(cols);
   for frm in frms.iter_mut() {
+    let mut frm = frame::Sorted::new(frm, "avg")?;
     eprintln!(">>> {}", frm);
     let mut dst = csv::Writer::from_writer(io::stdout());
     dst.write_record(frm.schema().record())?;
