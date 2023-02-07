@@ -22,6 +22,8 @@ pub struct Options {
   pub verbose: bool,
   #[clap(long, help="Join inputs on the specified column")]
   pub join: Option<String>,
+  #[clap(long, help="Sort the first inputs on the specified column")]
+  pub sort: Option<String>,
   #[clap(long, help="Select columns")]
   pub select: Vec<String>,
   #[clap(help="Document to open")]
@@ -43,19 +45,14 @@ fn cmd() -> Result<(), error::Error> {
   
   let mut frms: Vec<Box<dyn Frame>> = Vec::new();
   for s in &opts.docs {
-    let (name, input): (&str, Box<dyn io::Read>) = if s == "-" {
-      ("-", Box::new(io::stdin()))
+    let (alias, path) = parse_source(&s);
+    let (name, input): (&str, Box<dyn io::Read>) = if path == "-" {
+      (alias, Box::new(io::stdin()))
     }else{
-      let (alias, path) = parse_source(&s);
       (alias, Box::new(fs::File::open(path)?))
     };
     frms.push(Box::new(query::frame::Csv::new(&name, input)?));
   }
-  
-  // let mut cols: Vec<select::Column> = Vec::new();
-  // for s in &opts.select {
-  //   cols.push(select::Column::parse(&s)?);
-  // }
   
   let mut frms = if let Some(on) = &opts.join {
     let mut base: Option<Box<dyn Frame>> = None;
@@ -75,26 +72,20 @@ fn cmd() -> Result<(), error::Error> {
     frms
   };
   
-  // let sel = select::Join::new_with_columns(cols);
-  for frm in frms.iter_mut() {
-    let mut frm = frame::Sorted::new(frm, "avg")?;
+  for mut frm in frms.into_iter() {
+    let mut frm: Box<dyn Frame> = if let Some(on) = &opts.sort {
+      Box::new(frame::Sorted::new(&mut frm, on)?)
+    }else{
+      frm
+    };
+    
     eprintln!(">>> {}", frm);
     let mut dst = csv::Writer::from_writer(io::stdout());
     dst.write_record(frm.schema().record())?;
     
-    // let mut it = frm.rows();
-    // let schema = if let Some(hdrs) = it.next() {
-    //   let hdrs = hdrs?;
-    //   let schema = frame::Schema::new_from_headers(&hdrs);
-    //   dst.write_record(&sel.select(&schema, &hdrs)?)?;
-    //   schema
-    // }else{
-    //   break;
-    // };
-    for r in frm.rows() {
-      // let r = sel.select(&schema, &r?)?;
-      let r = r?;
-      dst.write_record(&r)?;
+    for row in frm.rows() {
+      let row = row?;
+      dst.write_record(&row)?;
     }
     
     dst.flush()?;

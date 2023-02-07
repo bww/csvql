@@ -5,7 +5,6 @@ use std::iter;
 use std::collections::HashSet;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
-use std::collections::BinaryHeap;
 
 use csv;
 
@@ -405,6 +404,93 @@ impl fmt::Display for Sorted {
     write!(f, "{}{{{}}}", self.name, &self.on)
   }
 }
+
+// // A grouping iterator
+// pub struct GroupIterator<F: Frame> {
+//   gcol: usize,
+//   data: F,
+// }
+
+// impl Iterator for MyRange {
+//   type Item = Result<csv::StringRecord, error::Error>;
+
+//   fn next(&mut self) -> Option<u64> {
+//       if self.start == self.end {
+//           None
+//       } else {
+//           let result = Some(self.start);
+//           self.start += 1;
+//           result
+//       }
+//   }
+// }
+
+// // A grouping frame
+// #[derive(Debug)]
+// pub struct Grouped<F: Frame> {
+//   name: String,
+//   on: String,
+//   schema: Schema,
+//   data: F,
+// }
+
+// impl<F: Frame> Grouped<F> {
+//   pub fn new(source: F, on: &str) -> Result<Grouped, error::Error> {
+//     let name = source.name().to_owned();
+//     let schema = source.schema().clone();
+//     let index_on = QName::new(&name, on);
+//     let data = Self::sorted(&schema, &index_on, source)?;
+//     Ok(Grouped{
+//       name: name,
+//       on: on.to_owned(),
+//       schema: schema,
+//       data: data,
+//     })
+//   }
+  
+//   fn sorted(schema: &Schema, on: &QName, source: &mut dyn Frame) -> Result<Vec<GroupedRecord>, error::Error> {
+//     let index = match schema.index(&on) {
+//       Some(index) => index,
+//       None => return Err(error::FrameError::new(&format!("Index column not found: {} ({})", &on, &schema)).into()),
+//     };
+    
+//     let mut data: Vec<GroupedRecord> = Vec::new();
+//     for row in source.rows() {
+//       let row = row?;
+//       let on = match row.get(index) {
+//         Some(on) => on,
+//         None => return Err(error::FrameError::new(&format!("Index column not found: {}", index)).into()),
+//       };
+//       data.push(GroupedRecord{
+//         on: on.to_owned(),
+//         data: row,
+//       });
+//     }
+    
+//     data.sort();
+//     Ok(data)
+//   }
+// }
+
+// impl Frame for Grouped {
+//   fn name<'a>(&'a self) -> &'a str {
+//     &self.name
+//   }
+  
+//   fn schema<'a>(&'a self) -> &'a Schema {
+//     &self.schema
+//   }
+  
+//   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+//     Box::new(self.data.iter().map(|e| { Ok(e.data.clone()) }))
+//   }
+// }
+
+// impl fmt::Display for Grouped {
+//   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//     write!(f, "{}({})", self.name, &self.on)
+//   }
+// }
 
 // A CSV input frame
 #[derive(Debug)]
