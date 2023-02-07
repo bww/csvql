@@ -58,7 +58,7 @@ fn cmd() -> Result<(), error::Error> {
     let mut base: Option<Box<dyn Frame>> = None;
     for mut frm in frms.into_iter() {
       if let Some(curr) = base {
-        base = Some(Box::new(frame::Join::new(on, curr, frame::BTreeIndex::new(&mut frm, on)?)?));
+        base = Some(Box::new(frame::OuterJoin::new(curr, on, frm, on)?));
       }else{
         base = Some(Box::new(frm));
       }

@@ -405,93 +405,6 @@ impl fmt::Display for Sorted {
   }
 }
 
-// // A grouping iterator
-// pub struct GroupIterator<F: Frame> {
-//   gcol: usize,
-//   data: F,
-// }
-
-// impl Iterator for MyRange {
-//   type Item = Result<csv::StringRecord, error::Error>;
-
-//   fn next(&mut self) -> Option<u64> {
-//       if self.start == self.end {
-//           None
-//       } else {
-//           let result = Some(self.start);
-//           self.start += 1;
-//           result
-//       }
-//   }
-// }
-
-// // A grouping frame
-// #[derive(Debug)]
-// pub struct Grouped<F: Frame> {
-//   name: String,
-//   on: String,
-//   schema: Schema,
-//   data: F,
-// }
-
-// impl<F: Frame> Grouped<F> {
-//   pub fn new(source: F, on: &str) -> Result<Grouped, error::Error> {
-//     let name = source.name().to_owned();
-//     let schema = source.schema().clone();
-//     let index_on = QName::new(&name, on);
-//     let data = Self::sorted(&schema, &index_on, source)?;
-//     Ok(Grouped{
-//       name: name,
-//       on: on.to_owned(),
-//       schema: schema,
-//       data: data,
-//     })
-//   }
-  
-//   fn sorted(schema: &Schema, on: &QName, source: &mut dyn Frame) -> Result<Vec<GroupedRecord>, error::Error> {
-//     let index = match schema.index(&on) {
-//       Some(index) => index,
-//       None => return Err(error::FrameError::new(&format!("Index column not found: {} ({})", &on, &schema)).into()),
-//     };
-    
-//     let mut data: Vec<GroupedRecord> = Vec::new();
-//     for row in source.rows() {
-//       let row = row?;
-//       let on = match row.get(index) {
-//         Some(on) => on,
-//         None => return Err(error::FrameError::new(&format!("Index column not found: {}", index)).into()),
-//       };
-//       data.push(GroupedRecord{
-//         on: on.to_owned(),
-//         data: row,
-//       });
-//     }
-    
-//     data.sort();
-//     Ok(data)
-//   }
-// }
-
-// impl Frame for Grouped {
-//   fn name<'a>(&'a self) -> &'a str {
-//     &self.name
-//   }
-  
-//   fn schema<'a>(&'a self) -> &'a Schema {
-//     &self.schema
-//   }
-  
-//   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
-//     Box::new(self.data.iter().map(|e| { Ok(e.data.clone()) }))
-//   }
-// }
-
-// impl fmt::Display for Grouped {
-//   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//     write!(f, "{}({})", self.name, &self.on)
-//   }
-// }
-
 // A CSV input frame
 #[derive(Debug)]
 pub struct Csv<R: io::Read> {
@@ -659,6 +572,173 @@ impl<L: Frame, R: Index> Frame for Join<L, R> {
 
 impl<L: Frame, R: Index> fmt::Display for Join<L, R> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "({} <> {})[{}]", &self.left, &self.right, &self.on)
+    write!(f, "({} << {})[{}]", &self.left, &self.right, &self.on)
+  }
+}
+
+// A frame that outer-joins two frames on a column. Both input
+// frames are expected to be sorted by their joining column.
+#[derive(Debug)]
+pub struct OuterJoin<L: Frame, R: Frame> {
+  left: L,
+  left_schema: Schema,
+  left_on: String,
+  
+  right: R,
+  right_schema: Schema,
+  right_on: String,
+  
+  join_schema: Schema,
+}
+
+impl<L: Frame, R: Frame> OuterJoin<L, R> {
+  pub fn new(left: L, left_on: &str, right: R, right_on: &str) -> Result<OuterJoin<L, R>, error::Error> {
+    let s1 = left.schema().clone();
+    let s2 = right.schema().clone();
+    let sjoin = s1.join(&s2);
+    
+    Ok(OuterJoin{
+      left: left,
+      left_schema: s1,
+      left_on: left_on.to_owned(),
+      
+      right: right,
+      right_schema: s2,
+      right_on: right_on.to_owned(),
+      
+      join_schema: sjoin,
+    })
+  }
+}
+
+impl<L: Frame, R: Frame> Frame for OuterJoin<L, R> {
+  fn name<'a>(&'a self) -> &'a str {
+    self.left.name()
+  }
+  
+  fn schema<'a>(&'a self) -> &'a Schema {
+    &self.join_schema
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+    let left_on = QName::new(self.left.name(), &self.left_on);
+    let left_index = match self.left_schema.index(&left_on) {
+      Some(index) => index,
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &left_on, &self.left_schema)).into()))),
+    };
+    
+    let right_on = QName::new(self.right.name(), &self.right_on);
+    let right_index = match self.right_schema.index(&right_on) {
+      Some(index) => index,
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &right_on, &self.right_schema)).into()))),
+    };
+    
+    let mut rows: Vec<Result<csv::StringRecord, error::Error>> = Vec::new();
+    
+    let mut iter_left = self.left.rows();
+    let mut curr_left: Option<Result<csv::StringRecord, error::Error>> = None;
+    let mut iter_right = self.right.rows();
+    let mut curr_right: Option<Result<csv::StringRecord, error::Error>> = None;
+    
+    loop {
+      curr_left = match curr_left {
+        Some(val) => Some(val),
+        None => iter_left.next(),
+      };
+      let (left, left_cmp) = match &curr_left {
+        Some(left) => match left {
+          Ok(left) => match left.get(left_index) {
+            Some(cmp) => (Some(left), Some(cmp)),
+            None => (Some(left), None),
+          },
+          Err(err) => {
+            rows.push(Err(error::FrameError::new(&format!("Error reading left side of join: {}", err)).into()));
+            break;
+          },
+        },
+        None => (None, None),
+      };
+      
+      curr_right = match curr_right {
+        Some(val) => Some(val),
+        None => iter_right.next(),
+      };
+      let (right, right_cmp) = match &curr_right {
+        Some(right) => match right {
+          Ok(right) => match right.get(right_index) {
+            Some(cmp) => (Some(right), Some(cmp)),
+            None => (Some(right), None),
+          },
+          Err(err) => {
+            rows.push(Err(error::FrameError::new(&format!("Error reading right side of join: {}", err)).into()));
+            break;
+          },
+        },
+        None => (None, None),
+      };
+      
+      let mut row: Vec<String> = Vec::new();
+      if let (Some(left_cmp), Some(right_cmp)) = (left_cmp, right_cmp) {
+        if left_cmp < right_cmp {
+          row.extend(&mut left.unwrap().iter().map(|e| { e.to_owned() }));
+          row.append(&mut self.right_schema.empty_row(0));
+          curr_left = None;
+        }else if right_cmp < left_cmp {
+          row.append(&mut self.left_schema.empty_row(0));
+          row.extend(&mut right.unwrap().iter().map(|e| { e.to_owned() }));
+          curr_right = None;
+        }else{
+          row.extend(&mut left.unwrap().iter().map(|e| { e.to_owned() }));
+          curr_left = None;
+          row.extend(&mut right.unwrap().iter().map(|e| { e.to_owned() }));
+          curr_right = None;
+        }
+      }else if let Some(_) = left_cmp {
+        row.extend(&mut left.unwrap().iter().map(|e| { e.to_owned() }));
+        row.append(&mut self.right_schema.empty_row(0));
+        curr_left = None;
+      }else if let Some(_) = right_cmp {
+        row.append(&mut self.left_schema.empty_row(0));
+        row.extend(&mut right.unwrap().iter().map(|e| { e.to_owned() }));
+        curr_right = None;
+      }else{
+        break; // no data left; done processing
+      }
+      
+      rows.push(Ok(row.into()));
+    }
+    
+    // let rows = self.left.rows().map(move |row| {
+    //   let row = row?;
+      
+    //   let mut res: Vec<String> = Vec::new();
+    //   for field in &row {
+    //     res.push(field.to_owned()); // can we avoid this copy?
+    //   }
+      
+    //   if let Some(field) = row.get(left_index) {
+    //     match right.get(&field) {
+    //       Ok(row) => for (i, field) in row.iter().enumerate() {
+    //         if i != right_index {
+    //           res.push(field.to_owned()); // can we avoid this copy?
+    //         }
+    //       },
+    //       Err(err) => match err {
+    //         error::Error::NotFoundError => res.append(&mut right_schema.empty_row(0)),
+    //         err => return Err(err),
+    //       },
+    //     };
+    //   }
+      
+    //   Ok(res.into())
+    // });
+    
+    Box::new(rows.into_iter())
+  }
+}
+
+impl<L: Frame, R: Frame> fmt::Display for OuterJoin<L, R> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "({} <> {})[{}, {}]", &self.left, &self.right, &self.left_on, &self.right_on)
   }
 }
