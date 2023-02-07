@@ -1,4 +1,4 @@
-// use std::fmt;
+use std::fmt;
 
 use csv;
 
@@ -6,13 +6,56 @@ use crate::csvql::query::frame;
 use crate::csvql::query::error;
 
 // A data selector
-pub trait Selector {
-  fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error>;
+pub trait Selector: fmt::Display {
+  fn select(&self, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error>;
 }
 
 impl<S: Selector + ?Sized> Selector for Box<S> { // black magic
-  fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
-    (**self).select(schema, row)
+  fn select(&self, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
+    (**self).select(row)
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct Columns {
+  names: Vec<String>,
+  indexes: Vec<usize>,
+}
+
+impl Columns {
+  pub fn new(schema: &frame::Schema, qnames: &Vec<frame::QName>) -> Result<Columns, error::Error> {
+    let mut names: Vec<String> = Vec::new();
+    let mut indexes: Vec<usize> = Vec::new();
+    for qname in qnames {
+      names.push(qname.to_string());
+      indexes.push(match schema.index(qname) {
+        Some(index) => index,
+        None => return Err(error::QueryError::new(&format!("Index column not found: {} ({})", qname, schema)).into()),
+      });
+    }
+    Ok(Columns{
+      names: names,
+      indexes: indexes,
+    })
+  }
+}
+
+impl Selector for Columns {
+  fn select(&self, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
+    let mut sel: Vec<String> = Vec::new();
+    for index in &self.indexes {
+      sel.push(match row.get(*index) {
+        Some(col) => col.to_string(), // can we avoid this copy?
+        None => return Err(error::QueryError::new(&format!("Index not found in data: {} > {}", index, row.len()-1)).into()),
+      });
+    }
+    Ok(sel.into())
+  }
+}
+
+impl fmt::Display for Columns {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "cols: {:?}", self.names)
   }
 }
 

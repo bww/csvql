@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use csv;
 
 use crate::csvql::query::error;
+use crate::csvql::query::select;
 
 fn convert_record(e: csv::Result<csv::StringRecord>) -> Result<csv::StringRecord, error::Error> {
   match e {
@@ -311,6 +312,48 @@ impl Index for BTreeIndex {
 impl fmt::Display for BTreeIndex {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}[{}]", self.name, &self.on)
+  }
+}
+
+// A filtered frame
+#[derive(Debug)]
+pub struct Filter<F: Frame, S: select::Selector> {
+  selector: S,
+  data: F,
+}
+
+impl<F: Frame, S: select::Selector> Filter<F, S> {
+  pub fn new(source: F, selector: S) -> Result<Filter<F, S>, error::Error> {
+    Ok(Filter{
+      selector: selector,
+      data: source,
+    })
+  }
+}
+
+impl<F: Frame, S: select::Selector> Frame for Filter<F, S> {
+  fn name<'a>(&'a self) -> &'a str {
+    self.data.name()
+  }
+  
+  fn schema<'a>(&'a self) -> &'a Schema {
+    self.data.schema()
+  }
+  
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+    let sel = &self.selector;
+    Box::new(self.data.rows().map(|e| {
+      match e {
+        Ok(row) => sel.select(&row),
+        Err(err) => Err(err),
+      }
+    }))
+  }
+}
+
+impl<F: Frame, S: select::Selector> fmt::Display for Filter<F, S> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}<{}>", self.name(), &self.selector)
   }
 }
 
@@ -707,31 +750,6 @@ impl<L: Frame, R: Frame> Frame for OuterJoin<L, R> {
       
       rows.push(Ok(row.into()));
     }
-    
-    // let rows = self.left.rows().map(move |row| {
-    //   let row = row?;
-      
-    //   let mut res: Vec<String> = Vec::new();
-    //   for field in &row {
-    //     res.push(field.to_owned()); // can we avoid this copy?
-    //   }
-      
-    //   if let Some(field) = row.get(left_index) {
-    //     match right.get(&field) {
-    //       Ok(row) => for (i, field) in row.iter().enumerate() {
-    //         if i != right_index {
-    //           res.push(field.to_owned()); // can we avoid this copy?
-    //         }
-    //       },
-    //       Err(err) => match err {
-    //         error::Error::NotFoundError => res.append(&mut right_schema.empty_row(0)),
-    //         err => return Err(err),
-    //       },
-    //     };
-    //   }
-      
-    //   Ok(res.into())
-    // });
     
     Box::new(rows.into_iter())
   }

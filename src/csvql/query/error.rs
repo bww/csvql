@@ -42,11 +42,31 @@ impl fmt::Display for FrameError {
 }
 
 #[derive(Debug)]
+pub struct QueryError {
+  message: String,
+}
+
+impl QueryError {
+  pub fn new(msg: &str) -> QueryError {
+    QueryError{
+      message: msg.to_owned(),
+    }
+  }
+}
+
+impl fmt::Display for QueryError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.message)
+  }
+}
+
+#[derive(Debug)]
 pub enum Error {
   IOError(io::Error),
   CsvError(csv::Error),
   ParseError(ParseError),
   FrameError(FrameError),
+  QueryError(QueryError),
   NotFoundError,
 }
 
@@ -74,6 +94,12 @@ impl From<FrameError> for Error {
   }
 }
 
+impl From<QueryError> for Error {
+  fn from(err: QueryError) -> Self {
+    Self::QueryError(err)
+  }
+}
+
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -81,6 +107,7 @@ impl fmt::Display for Error {
       Self::CsvError(err) => err.fmt(f),
       Self::ParseError(err) => err.fmt(f),
       Self::FrameError(err) => err.fmt(f),
+      Self::QueryError(err) => err.fmt(f),
       Self::NotFoundError => write!(f, "not found"),
     }
   }

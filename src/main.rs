@@ -10,8 +10,8 @@ use clap::Parser;
 use csvql::query;
 use csvql::query::frame;
 use csvql::query::frame::Frame;
-// use csvql::query::select;
-// use csvql::query::select::Selector;
+use csvql::query::select;
+use csvql::query::select::Selector;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -26,7 +26,7 @@ pub struct Options {
   pub sort_read: Option<String>,
   #[clap(long="sort:write", help="Sort output data on the specified column")]
   pub sort_write: Option<String>,
-  #[clap(long, help="Select columns")]
+  #[clap(long, help="Select columns to report")]
   pub select: Vec<String>,
   #[clap(help="Document to open")]
   pub docs: Vec<String>,
@@ -87,9 +87,26 @@ fn cmd() -> Result<(), error::Error> {
       frm
     };
     
+    let sel = if opts.select.len() > 0 {
+      let qnames: Vec<frame::QName> = opts.select.iter().map(|e| { frame::QName::new(frm.name(), e) }).collect();
+      Some(select::Columns::new(frm.schema(), &qnames)?)
+    }else{
+      None
+    };
+    
+    let mut frm: Box<dyn Frame> = if let Some(sel) = &sel {
+      Box::new(frame::Filter::new(frm, sel.clone())?)
+    }else{
+      frm
+    };
+    
     eprintln!(">>> {}", frm);
     let mut dst = csv::Writer::from_writer(io::stdout());
-    dst.write_record(frm.schema().record())?;
+    if let Some(sel) = &sel {
+      dst.write_record(&sel.select(&csv::StringRecord::from(frm.schema().record()))?)?;
+    }else{
+      dst.write_record(frm.schema().record())?;
+    }
     
     for row in frm.rows() {
       let row = row?;
