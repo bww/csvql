@@ -51,7 +51,13 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       (alias, Box::new(fs::File::open(path)?))
     };
-    frms.push(Box::new(query::frame::Csv::new(&name, input)?));
+    let mut raw = query::frame::Csv::new(&name, input)?;
+    let frm: Box<dyn Frame> = if let Some(on) = &opts.sort {
+      Box::new(frame::Sorted::new(&mut raw, on)?)
+    }else{
+      Box::new(raw)
+    };
+    frms.push(frm);
   }
   
   let mut frms = if let Some(on) = &opts.join {
@@ -73,12 +79,6 @@ fn cmd() -> Result<(), error::Error> {
   };
   
   for mut frm in frms.into_iter() {
-    let mut frm: Box<dyn Frame> = if let Some(on) = &opts.sort {
-      Box::new(frame::Sorted::new(&mut frm, on)?)
-    }else{
-      frm
-    };
-    
     eprintln!(">>> {}", frm);
     let mut dst = csv::Writer::from_writer(io::stdout());
     dst.write_record(frm.schema().record())?;
