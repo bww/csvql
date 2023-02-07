@@ -22,8 +22,10 @@ pub struct Options {
   pub verbose: bool,
   #[clap(long, help="Join inputs on the specified column")]
   pub join: Option<String>,
-  #[clap(long, help="Sort the first inputs on the specified column")]
-  pub sort: Option<String>,
+  #[clap(long="sort:read", help="Sort input on the specified column")]
+  pub sort_read: Option<String>,
+  #[clap(long="sort:write", help="Sort output data on the specified column")]
+  pub sort_write: Option<String>,
   #[clap(long, help="Select columns")]
   pub select: Vec<String>,
   #[clap(help="Document to open")]
@@ -52,7 +54,7 @@ fn cmd() -> Result<(), error::Error> {
       (alias, Box::new(fs::File::open(path)?))
     };
     let mut raw = query::frame::Csv::new(&name, input)?;
-    let frm: Box<dyn Frame> = if let Some(on) = &opts.sort {
+    let frm: Box<dyn Frame> = if let Some(on) = &opts.sort_read {
       Box::new(frame::Sorted::new(&mut raw, on)?)
     }else{
       Box::new(raw)
@@ -79,6 +81,12 @@ fn cmd() -> Result<(), error::Error> {
   };
   
   for mut frm in frms.into_iter() {
+    let mut frm: Box<dyn Frame> = if let Some(on) = &opts.sort_write {
+      Box::new(frame::Sorted::new(&mut frm, on)?)
+    }else{
+      frm
+    };
+    
     eprintln!(">>> {}", frm);
     let mut dst = csv::Writer::from_writer(io::stdout());
     dst.write_record(frm.schema().record())?;
