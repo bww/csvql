@@ -1,5 +1,6 @@
 pub mod frame;
 pub mod select;
+pub mod schema;
 pub mod error;
 
 // use frame::Frame;

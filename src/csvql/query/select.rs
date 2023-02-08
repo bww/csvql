@@ -2,11 +2,11 @@ use std::fmt;
 
 use csv;
 
-use crate::csvql::query::frame;
+use crate::csvql::query::schema;
 use crate::csvql::query::error;
 
 // A data selector
-pub trait Selector: fmt::Display {
+pub trait Selector: fmt::Display + fmt::Debug {
   fn select(&self, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error>;
 }
 
@@ -16,14 +16,24 @@ impl<S: Selector + ?Sized> Selector for Box<S> { // black magic
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Columns {
   names: Vec<String>,
   indexes: Vec<usize>,
 }
 
 impl Columns {
-  pub fn new(schema: &frame::Schema, qnames: &Vec<frame::QName>) -> Result<Columns, error::Error> {
+  pub fn parse(schema: &schema::Schema, text: &Vec<String>) -> Result<Columns, error::Error> {
+    let mut qnames: Vec<schema::QName> = Vec::new();
+    for t in text {
+      for e in t.split(",") {
+        qnames.push(schema::QName::parse(e)?);
+      }
+    }
+    Self::new(schema, &qnames)
+  }
+  
+  pub fn new(schema: &schema::Schema, qnames: &Vec<schema::QName>) -> Result<Columns, error::Error> {
     let mut names: Vec<String> = Vec::new();
     let mut indexes: Vec<usize> = Vec::new();
     for qname in qnames {
@@ -56,6 +66,12 @@ impl Selector for Columns {
 impl fmt::Display for Columns {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "cols: {:?}", self.names)
+  }
+}
+
+impl fmt::Debug for Columns {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "cols: {:?} {:?}", self.names, self.indexes)
   }
 }
 
@@ -96,7 +112,7 @@ impl fmt::Display for Columns {
 // }
 
 // impl Selector for Join {
-//   fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
+//   fn select(&self, schema: &schema::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
 //     if self.sels.len() == 0 {
 //       return Ok(row.to_owned());
 //     }
@@ -161,7 +177,7 @@ impl fmt::Display for Columns {
 // }
 
 // impl Selector for Column {
-//   fn select(&self, schema: &frame::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
+//   fn select(&self, schema: &schema::Schema, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
 //     let mut sel: Vec<String> = Vec::new();
 //     if let Some(index) = schema.index(&self.name) {
 //       if let Some(col) = row.get(index) {

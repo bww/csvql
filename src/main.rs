@@ -12,6 +12,7 @@ use csvql::query::frame;
 use csvql::query::frame::Frame;
 use csvql::query::select;
 use csvql::query::select::Selector;
+use csvql::query::schema;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -62,9 +63,9 @@ fn cmd() -> Result<(), error::Error> {
     frms.push(frm);
   }
   
-  let mut frms = if let Some(on) = &opts.join {
+  let frms = if let Some(on) = &opts.join {
     let mut base: Option<Box<dyn Frame>> = None;
-    for mut frm in frms.into_iter() {
+    for frm in frms.into_iter() {
       if let Some(curr) = base {
         base = Some(Box::new(frame::OuterJoin::new(curr, on, frm, on)?));
       }else{
@@ -81,15 +82,14 @@ fn cmd() -> Result<(), error::Error> {
   };
   
   for mut frm in frms.into_iter() {
-    let mut frm: Box<dyn Frame> = if let Some(on) = &opts.sort_write {
+    let frm: Box<dyn Frame> = if let Some(on) = &opts.sort_write {
       Box::new(frame::Sorted::new(&mut frm, on)?)
     }else{
       frm
     };
     
     let sel = if opts.select.len() > 0 {
-      let qnames: Vec<frame::QName> = opts.select.iter().map(|e| { frame::QName::new(frm.name(), e) }).collect();
-      Some(select::Columns::new(frm.schema(), &qnames)?)
+      Some(select::Columns::parse(frm.schema(), &opts.select)?)
     }else{
       None
     };
