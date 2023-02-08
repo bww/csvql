@@ -156,7 +156,6 @@ impl<F: Frame, S: select::Selector> Frame for Filter<F, S> {
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
     let sel = &self.selector;
-    eprintln!(">>> {:?}", sel);
     Box::new(self.data.rows().map(|e| {
       match e {
         Ok(row) => sel.select(&row),

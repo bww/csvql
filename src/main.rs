@@ -101,6 +101,7 @@ fn cmd() -> Result<(), error::Error> {
     };
     
     eprintln!(">>> {}", frm);
+    
     let mut dst = csv::Writer::from_writer(io::stdout());
     if let Some(sel) = &sel {
       dst.write_record(&sel.select(&csv::StringRecord::from(frm.schema().record()))?)?;
