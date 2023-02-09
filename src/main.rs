@@ -12,13 +12,14 @@ use csvql::query::frame;
 use csvql::query::frame::Frame;
 use csvql::query::select;
 use csvql::query::select::Selector;
+use csvql::query::schema;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
 pub struct Options {
   #[clap(long, help="Enable debugging mode")]
   pub debug: bool,
-  #[clap(long)]
+  #[clap(long, help="Enable verbose output")]
   pub verbose: bool,
   #[clap(long, help="Join inputs on the specified column")]
   pub join: Option<String>,
@@ -53,23 +54,24 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       (alias, Box::new(fs::File::open(path)?))
     };
-    let mut raw = query::frame::Csv::new(&name, input)?;
-    let frm: Box<dyn Frame> = if let Some(on) = &opts.sort_read {
-      Box::new(frame::Sorted::new(&mut raw, on)?)
-    }else{
-      Box::new(raw)
-    };
-    frms.push(frm);
+    // let mut raw = query::frame::Csv::new(&name, input)?;
+    // let frm: Box<dyn Frame> = if let Some(on) = &opts.sort_read {
+    //   Box::new(frame::Sorted::new(&mut raw, on)?)
+    // }else{
+    //   Box::new(raw)
+    // };
+    // frms.push(frm);
+    frms.push(Box::new(query::frame::Csv::new(&name, input)?));
   }
   
   let frms = if let Some(on) = &opts.join {
     let join = select::Join::parse(on)?;
     let mut base: Option<Box<dyn Frame>> = None;
-    for frm in frms.into_iter() {
+    for mut frm in frms.into_iter() {
       if let Some(curr) = base {
-        base = Some(Box::new(frame::OuterJoin::new(curr, join.left(), frm, join.right())?));
+        base = Some(Box::new(frame::OuterJoin::new(curr, join.left(), frame::Sorted::new(&mut frm, join.right())?, join.right())?));
       }else{
-        base = Some(Box::new(frm));
+        base = Some(Box::new(frame::Sorted::new(&mut frm, join.left())?));
       }
     }
     if let Some(base) = base {
@@ -83,7 +85,7 @@ fn cmd() -> Result<(), error::Error> {
   
   for mut frm in frms.into_iter() {
     let frm: Box<dyn Frame> = if let Some(on) = &opts.sort_write {
-      Box::new(frame::Sorted::new(&mut frm, on)?)
+      Box::new(frame::Sorted::new(&mut frm, &schema::QName::parse(on)?)?)
     }else{
       frm
     };
@@ -100,7 +102,9 @@ fn cmd() -> Result<(), error::Error> {
       frm
     };
     
-    eprintln!(">>> {}", frm);
+    if opts.verbose {
+      eprintln!(">>> {}", frm);
+    }
     
     let mut dst = csv::Writer::from_writer(io::stdout());
     if let Some(sel) = &sel {

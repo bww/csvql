@@ -199,20 +199,19 @@ impl PartialEq for SortedRecord {
 #[derive(Debug)]
 pub struct Sorted {
   name: String,
-  on: String,
+  on: schema::QName,
   schema: schema::Schema,
   data: Vec<SortedRecord>,
 }
 
 impl Sorted {
-  pub fn new(source: &mut dyn Frame, on: &str) -> Result<Sorted, error::Error> {
+  pub fn new(source: &mut dyn Frame, on: &schema::QName) -> Result<Sorted, error::Error> {
     let name = source.name().to_owned();
     let schema = source.schema().clone();
-    let index_on = schema::QName::new(&name, on);
-    let data = Self::sorted(&schema, &index_on, source)?;
+    let data = Self::sorted(&schema, on, source)?;
     Ok(Sorted{
       name: name,
-      on: on.to_owned(),
+      on: on.clone(),
       schema: schema,
       data: data,
     })
