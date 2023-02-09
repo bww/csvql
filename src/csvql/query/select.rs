@@ -116,3 +116,46 @@ impl fmt::Debug for Join {
     write!(f, "<{:?}>", &self.on)
   }
 }
+
+#[derive(Clone)]
+pub struct Sort {
+  on: Vec<schema::QName>,
+}
+
+impl Sort {
+  pub fn parse(text: &str) -> Result<Sort, error::Error> {
+    let mut on: Vec<schema::QName> = Vec::new();
+    for e in text.split(",") {
+      on.push(schema::QName::parse(e)?);
+    }
+    Ok(Self::new(on))
+  }
+  
+  pub fn new(on: Vec<schema::QName>) -> Sort {
+    Sort{
+      on: on,
+    }
+  }
+  
+  pub fn on(on: &schema::QName) -> Sort {
+    Sort{
+      on: vec![on.clone()],
+    }
+  }
+  
+  pub fn columns<'a>(&'a self) -> &'a Vec<schema::QName> {
+    &self.on
+  }
+}
+
+impl fmt::Display for Sort {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<{:?}>", &self.on)
+  }
+}
+
+impl fmt::Debug for Sort {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<{:?}>", &self.on)
+  }
+}

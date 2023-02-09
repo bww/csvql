@@ -211,6 +211,18 @@ impl Schema {
     None
   }
   
+  pub fn indexes(&self, qnames: &Vec<QName>) -> Option<Vec<usize>> {
+    let mut indexes: Vec<usize> = Vec::new();
+    for n in qnames {
+      if let Some(x) = self.index(n) {
+        indexes.push(x);
+      }else{
+        return None;
+      }
+    }
+    Some(indexes)
+  }
+  
   fn empty_vec(count: usize) -> Vec<String> {
     let mut empty: Vec<String> = Vec::new();
     for _ in 0..count {

@@ -54,13 +54,6 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       (alias, Box::new(fs::File::open(path)?))
     };
-    // let mut raw = query::frame::Csv::new(&name, input)?;
-    // let frm: Box<dyn Frame> = if let Some(on) = &opts.sort_read {
-    //   Box::new(frame::Sorted::new(&mut raw, on)?)
-    // }else{
-    //   Box::new(raw)
-    // };
-    // frms.push(frm);
     frms.push(Box::new(query::frame::Csv::new(&name, input)?));
   }
   
@@ -73,9 +66,9 @@ fn cmd() -> Result<(), error::Error> {
         None => return Err(error::ArgumentError::new(&format!("No join expression matches input frame: {}", frm.name())).into()),
       };
       if let (Some(curr), Some(curr_on)) = (base, base_on) {
-        base = Some(Box::new(frame::OuterJoin::new(curr, curr_on, frame::Sorted::new(&mut frm, on)?, on)?));
+        base = Some(Box::new(frame::OuterJoin::new(curr, curr_on, frame::Sorted::new(&mut frm, &select::Sort::on(on))?, on)?));
       }else{
-        base = Some(Box::new(frame::Sorted::new(&mut frm, on)?));
+        base = Some(Box::new(frame::Sorted::new(&mut frm, &select::Sort::on(on))?));
       }
       base_on = Some(on);
     }
@@ -90,7 +83,7 @@ fn cmd() -> Result<(), error::Error> {
   
   for mut frm in frms.into_iter() {
     let frm: Box<dyn Frame> = if let Some(on) = &opts.sort_write {
-      Box::new(frame::Sorted::new(&mut frm, &schema::QName::parse(on)?)?)
+      Box::new(frame::Sorted::new(&mut frm, &select::Sort::parse(on)?)?)
     }else{
       frm
     };
