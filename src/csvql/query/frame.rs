@@ -398,17 +398,17 @@ impl<L: Frame, R: Index> fmt::Display for Join<L, R> {
 pub struct OuterJoin<L: Frame, R: Frame> {
   left: L,
   left_schema: schema::Schema,
-  left_on: String,
+  left_on: schema::QName,
   
   right: R,
   right_schema: schema::Schema,
-  right_on: String,
+  right_on: schema::QName,
   
   join_schema: schema::Schema,
 }
 
 impl<L: Frame, R: Frame> OuterJoin<L, R> {
-  pub fn new(left: L, left_on: &str, right: R, right_on: &str) -> Result<OuterJoin<L, R>, error::Error> {
+  pub fn new(left: L, left_on: &schema::QName, right: R, right_on: &schema::QName) -> Result<OuterJoin<L, R>, error::Error> {
     let s1 = left.schema().clone();
     let s2 = right.schema().clone();
     let sjoin = s1.join(&s2);
@@ -416,11 +416,11 @@ impl<L: Frame, R: Frame> OuterJoin<L, R> {
     Ok(OuterJoin{
       left: left,
       left_schema: s1,
-      left_on: left_on.to_owned(),
+      left_on: left_on.clone(),
       
       right: right,
       right_schema: s2,
-      right_on: right_on.to_owned(),
+      right_on: right_on.clone(),
       
       join_schema: sjoin,
     })
@@ -437,20 +437,16 @@ impl<L: Frame, R: Frame> Frame for OuterJoin<L, R> {
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
-    let left_on = schema::QName::new(self.left.name(), &self.left_on);
-    let left_index = match self.left_schema.index(&left_on) {
+    let left_index = match self.left_schema.index(&self.left_on) {
       Some(index) => index,
-      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &left_on, &self.left_schema)).into()))),
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &self.left_on, &self.left_schema)).into()))),
     };
-    
-    let right_on = schema::QName::new(self.right.name(), &self.right_on);
-    let right_index = match self.right_schema.index(&right_on) {
+    let right_index = match self.right_schema.index(&self.right_on) {
       Some(index) => index,
-      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &right_on, &self.right_schema)).into()))),
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Index column not found: {} ({})", &self.right_on, &self.right_schema)).into()))),
     };
     
     let mut rows: Vec<Result<csv::StringRecord, error::Error>> = Vec::new();
-    
     let mut iter_left = self.left.rows();
     let mut curr_left: Option<Result<csv::StringRecord, error::Error>> = None;
     let mut iter_right = self.right.rows();

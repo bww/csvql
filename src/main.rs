@@ -12,7 +12,6 @@ use csvql::query::frame;
 use csvql::query::frame::Frame;
 use csvql::query::select;
 use csvql::query::select::Selector;
-use csvql::query::schema;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -64,10 +63,11 @@ fn cmd() -> Result<(), error::Error> {
   }
   
   let frms = if let Some(on) = &opts.join {
+    let join = select::Join::parse(on)?;
     let mut base: Option<Box<dyn Frame>> = None;
     for frm in frms.into_iter() {
       if let Some(curr) = base {
-        base = Some(Box::new(frame::OuterJoin::new(curr, on, frm, on)?));
+        base = Some(Box::new(frame::OuterJoin::new(curr, join.left(), frm, join.right())?));
       }else{
         base = Some(Box::new(frm));
       }
