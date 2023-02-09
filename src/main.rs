@@ -66,13 +66,18 @@ fn cmd() -> Result<(), error::Error> {
   
   let frms = if let Some(on) = &opts.join {
     let join = select::Join::parse(on)?;
-    let mut base: Option<Box<dyn Frame>> = None;
+    let (mut base, mut base_on): (Option<Box<dyn Frame>>, Option<&schema::QName>) = (None, None);
     for mut frm in frms.into_iter() {
-      if let Some(curr) = base {
-        base = Some(Box::new(frame::OuterJoin::new(curr, join.left(), frame::Sorted::new(&mut frm, join.right())?, join.right())?));
+      let join_on = match join.for_scope(frm.name()) {
+        Some(on) => on,
+        None => return Err(error::ArgumentError::new(&format!("No join expression matches input frame: {}", frm.name())).into()),
+      };
+      if let (Some(curr), Some(curr_on)) = (base, base_on) {
+        base = Some(Box::new(frame::OuterJoin::new(curr, curr_on, frame::Sorted::new(&mut frm, join_on)?, join_on)?));
       }else{
-        base = Some(Box::new(frame::Sorted::new(&mut frm, join.left())?));
+        base = Some(Box::new(frame::Sorted::new(&mut frm, join_on)?));
       }
+      base_on = Some(join_on);
     }
     if let Some(base) = base {
       vec![base]

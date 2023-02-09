@@ -10,6 +10,14 @@ pub struct ArgumentError {
   message: String,
 }
 
+impl ArgumentError {
+  pub fn new(message: &str) -> ArgumentError {
+    ArgumentError{
+      message: message.to_owned(),
+    }
+  }
+}
+
 impl fmt::Display for ArgumentError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.message)

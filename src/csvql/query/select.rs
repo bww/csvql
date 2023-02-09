@@ -76,50 +76,43 @@ impl fmt::Debug for Columns {
 
 #[derive(Clone)]
 pub struct Join {
-  left: schema::QName,
-  right: schema::QName,
+  on: Vec<schema::QName>,
 }
 
 impl Join {
   pub fn parse(text: &str) -> Result<Join, error::Error> {
-    let split: Vec<&str> = text.splitn(2, "=").collect();
-    match split.len() {
-      2 => Ok(Self::new(
-        &schema::QName::parse(split[0])?,
-        &schema::QName::parse(split[1])?
-      )),
-      1 => match schema::QName::parse(split[0]) {
-        Ok(qname) => Ok(Self::new(&qname, &qname)),
-        Err(err) => Err(err.into()),
-      },
-      _ => Err(error::ParseError::new(&format!("Invalid qname format: {}", text)).into()),
+    let mut on: Vec<schema::QName> = Vec::new();
+    for e in text.split("=") {
+      on.push(schema::QName::parse(e)?);
     }
+    Ok(Self::new(on))
   }
   
-  pub fn new(left: &schema::QName, right: &schema::QName) -> Join {
+  pub fn new(on: Vec<schema::QName>) -> Join {
     Join{
-      left: left.clone(),
-      right: right.clone(),
+      on: on,
     }
   }
   
-  pub fn left<'a>(&'a self) -> &'a schema::QName {
-    &self.left
-  }
-  
-  pub fn right<'a>(&'a self) -> &'a schema::QName {
-    &self.right
+  pub fn for_scope<'a>(&'a self, scope: &str) -> Option<&'a schema::QName> {
+    let check = Some(scope);
+    for e in &self.on {
+      if e.scope() == check {
+        return Some(&e);
+      }
+    }
+    None
   }
 }
 
 impl fmt::Display for Join {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}<>{}", &self.left, &self.right)
+    write!(f, "<{:?}>", &self.on)
   }
 }
 
 impl fmt::Debug for Join {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{:?}<>{:?}", &self.left, &self.right)
+    write!(f, "<{:?}>", &self.on)
   }
 }
