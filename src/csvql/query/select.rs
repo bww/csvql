@@ -1,6 +1,7 @@
 use std::fmt;
 
 use csv;
+use itertools::Itertools;
 
 use crate::csvql::query::schema;
 use crate::csvql::query::error;
@@ -117,34 +118,67 @@ impl fmt::Debug for Join {
   }
 }
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum Order {
+  Asc(schema::QName),
+  Dsc(schema::QName),
+}
+
+impl fmt::Display for Order {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Order::Asc(col) => write!(f, "<{:?} asc>", &col),
+      Order::Dsc(col) => write!(f, "<{:?} dsc>", &col),
+    }
+  }
+}
+
+impl fmt::Debug for Order {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Order::Asc(col) => write!(f, "<{:?} asc>", &col),
+      Order::Dsc(col) => write!(f, "<{:?} dsc>", &col),
+    }
+  }
+}
+
 #[derive(Clone)]
 pub struct Sort {
-  on: Vec<schema::QName>,
+  on: Vec<Order>,
 }
 
 impl Sort {
   pub fn parse(text: &str) -> Result<Sort, error::Error> {
-    let mut on: Vec<schema::QName> = Vec::new();
+    let mut on: Vec<Order> = Vec::new();
     for e in text.split(",") {
-      on.push(schema::QName::parse(e)?);
+      on.push(Order::Asc(schema::QName::parse(e)?));
     }
     Ok(Self::new(on))
   }
   
-  pub fn new(on: Vec<schema::QName>) -> Sort {
+  pub fn new(on: Vec<Order>) -> Sort {
     Sort{
       on: on,
     }
   }
   
-  pub fn on(on: &schema::QName) -> Sort {
+  pub fn on(on: Order) -> Sort {
     Sort{
-      on: vec![on.clone()],
+      on: vec![on],
     }
   }
   
-  pub fn columns<'a>(&'a self) -> &'a Vec<schema::QName> {
-    &self.on
+  pub fn columns(&self) -> Vec<schema::QName> {
+    self.on.iter().map(|e| { match e {
+      Order::Asc(col) => col.clone(),
+      Order::Dsc(col) => col.clone(),
+    }}).collect()
+  }
+  
+  pub fn join(&self, another: &Sort) -> Sort {
+    Sort{
+      on: self.on.iter().chain(another.on.iter()).unique().map(|e| { e.clone() }).collect(),
+    }
   }
 }
 

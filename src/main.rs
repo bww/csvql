@@ -65,10 +65,15 @@ fn cmd() -> Result<(), error::Error> {
         Some(on) => on,
         None => return Err(error::ArgumentError::new(&format!("No join expression matches input frame: {}", frm.name())).into()),
       };
+      let sort = select::Sort::on(select::Order::Asc(on.clone()));
+      let sort = match &opts.sort_read {
+        Some(on) => sort.join(&select::Sort::parse(on)?),
+        None => sort,
+      };
       if let (Some(curr), Some(curr_on)) = (base, base_on) {
-        base = Some(Box::new(frame::OuterJoin::new(curr, curr_on, frame::Sorted::new(&mut frm, &select::Sort::on(on))?, on)?));
+        base = Some(Box::new(frame::OuterJoin::new(curr, curr_on, frame::Sorted::new(&mut frm, &sort)?, on)?));
       }else{
-        base = Some(Box::new(frame::Sorted::new(&mut frm, &select::Sort::on(on))?));
+        base = Some(Box::new(frame::Sorted::new(&mut frm, &sort)?));
       }
       base_on = Some(on);
     }
