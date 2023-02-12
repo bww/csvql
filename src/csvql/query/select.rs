@@ -118,17 +118,17 @@ impl fmt::Debug for Join {
   }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Order {
-  Asc(schema::QName),
-  Dsc(schema::QName),
+  Asc,
+  Dsc,
 }
 
 impl fmt::Display for Order {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Order::Asc(col) => write!(f, "<{:?} asc>", &col),
-      Order::Dsc(col) => write!(f, "<{:?} dsc>", &col),
+      Order::Asc => write!(f, "asc"),
+      Order::Dsc => write!(f, "dsc"),
     }
   }
 }
@@ -136,43 +136,40 @@ impl fmt::Display for Order {
 impl fmt::Debug for Order {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Order::Asc(col) => write!(f, "<{:?} asc>", &col),
-      Order::Dsc(col) => write!(f, "<{:?} dsc>", &col),
+      Order::Asc => write!(f, "asc"),
+      Order::Dsc => write!(f, "dsc"),
     }
   }
 }
 
 #[derive(Clone)]
 pub struct Sort {
-  on: Vec<Order>,
+  on: Vec<(schema::QName, Order)>,
 }
 
 impl Sort {
   pub fn parse(text: &str) -> Result<Sort, error::Error> {
-    let mut on: Vec<Order> = Vec::new();
+    let mut on: Vec<(schema::QName, Order)> = Vec::new();
     for e in text.split(",") {
-      on.push(Order::Asc(schema::QName::parse(e)?));
+      on.push((schema::QName::parse(e)?, Order::Asc));
     }
     Ok(Self::new(on))
   }
   
-  pub fn new(on: Vec<Order>) -> Sort {
+  pub fn new(on: Vec<(schema::QName, Order)>) -> Sort {
     Sort{
       on: on,
     }
   }
   
-  pub fn on(on: Order) -> Sort {
+  pub fn on(on: (schema::QName, Order)) -> Sort {
     Sort{
       on: vec![on],
     }
   }
   
-  pub fn columns(&self) -> Vec<schema::QName> {
-    self.on.iter().map(|e| { match e {
-      Order::Asc(col) => col.clone(),
-      Order::Dsc(col) => col.clone(),
-    }}).collect()
+  pub fn columns<'a>(&'a self) -> &'a Vec<(schema::QName, Order)> {
+    &self.on
   }
   
   pub fn join(&self, another: &Sort) -> Sort {

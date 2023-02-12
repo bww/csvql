@@ -65,7 +65,7 @@ fn cmd() -> Result<(), error::Error> {
         Some(on) => on,
         None => return Err(error::ArgumentError::new(&format!("No join expression matches input frame: {}", frm.name())).into()),
       };
-      let sort = select::Sort::on(select::Order::Asc(on.clone()));
+      let sort = select::Sort::on((on.clone(), select::Order::Asc));
       let sort = match &opts.sort_read {
         Some(on) => sort.join(&select::Sort::parse(on)?),
         None => sort,

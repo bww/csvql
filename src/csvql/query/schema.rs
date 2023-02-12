@@ -4,6 +4,7 @@ use std::iter;
 use std::hash;
 use std::collections::HashMap;
 
+use crate::csvql::query::select;
 use crate::csvql::query::error;
 
 #[derive(Clone, Eq)]
@@ -211,16 +212,16 @@ impl Schema {
     None
   }
   
-  pub fn indexes(&self, qnames: &Vec<QName>) -> Option<Vec<usize>> {
-    let mut indexes: Vec<usize> = Vec::new();
-    for n in qnames {
-      if let Some(x) = self.index(n) {
-        indexes.push(x);
+  pub fn sorting(&self, sort: &select::Sort) -> Option<Vec<(usize, select::Order)>> {
+    let mut sorting: Vec<(usize, select::Order)> = Vec::new();
+    for (qname, ord) in sort.columns() {
+      if let Some(x) = self.index(qname) {
+        sorting.push((x, *ord));
       }else{
         return None;
       }
     }
-    Some(indexes)
+    Some(sorting)
   }
   
   fn empty_vec(count: usize) -> Vec<String> {

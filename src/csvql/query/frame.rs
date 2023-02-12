@@ -172,103 +172,57 @@ impl<F: Frame, S: select::Selector> fmt::Display for Filter<F, S> {
 }
 
 #[derive(Debug, Clone, Eq)]
-struct SortedField<'a> {
-  value: &'a str,
-  order: &'a select::Order,
+struct Field {
+  value: String,
+  order: select::Order,
 }
 
-impl<'a> SortedField<'a> {
-  fn new(value: &'a str, order: &'a select::Order) -> SortedField<'a> {
-    SortedField{
-      value: value,
+impl Field {
+  fn new(value: &str, order: select::Order) -> Field {
+    Field{
+      value: value.to_owned(),
       order: order,
     }
   }
 }
 
-impl<'a> Ord for SortedField<'a> {
+impl Ord for Field {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
     let res = self.value.cmp(&other.value);
     match self.order {
-      select::Order::Asc(_) => res,
-      select::Order::Dsc(_) => match res {
-        cmp::Ordering::Less     => cmp::Ordering::Greater,
-        cmp::Ordering::Equal    => cmp::Ordering::Equal,
-        cmp::Ordering::Greater  => cmp::Ordering::Less,
+      select::Order::Asc => res,
+      select::Order::Dsc => match res {
+        cmp::Ordering::Less    => cmp::Ordering::Greater,
+        cmp::Ordering::Equal   => cmp::Ordering::Equal,
+        cmp::Ordering::Greater => cmp::Ordering::Less,
       },
     }
   }
 }
 
-impl<'a> PartialOrd for SortedField<'a> {
+impl PartialOrd for Field {
   fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl<'a> PartialEq for SortedField<'a> {
+impl PartialEq for Field {
   fn eq(&self, other: &Self) -> bool {
     self.value == other.value
   }
 }
 
-#[derive(Debug, Eq)]
-struct SortedRecord<'a> {
-  on: Vec<SortedField<'a>>,
-  data: &'a csv::StringRecord,
-}
-
-impl<'a> SortedRecord<'a> {
-  fn new(sort: &select::Sort, data: &'a csv::StringRecord) -> SortedRecord<'a> {
-    let mut fields: Vec<SortedField<'a>> = Vec::new();
-    for index in &indexes {
-      match row.get(*index) {
-        Some(col) => fields.push(SortedField::new(col)),
-        None => return Err(error::FrameError::new(&format!("Index column not found: {}", index)).into()),
-      };
-    }
-    SortedRecord{
-      on: 
-      data: data,
-    }
-  }
-}
-
-impl<'a> Ord for SortedRecord<'a> {
-  fn cmp(&self, other: &Self) -> cmp::Ordering {
-    let mut res = cmp::Ordering::Equal;
-    let n = cmp::min(self.on.len(), other.on.len());
-    for i in 0..n {
-      let (x, y) = (&self.on[i], &other.on[i]);
-      res = res.then(x.cmp(y));
-    }
-    res
-  }
-}
-
-impl<'a> PartialOrd for SortedRecord<'a> {
-  fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl<'a> PartialEq for SortedRecord<'a> {
-  fn eq(&self, other: &Self) -> bool {
-    self.on == other.on
-  }
-}
-
 // A sorted frame
 #[derive(Debug)]
-pub struct Sorted<'a> {
+pub struct Sorted {
   name: String,
   on: select::Sort,
   schema: schema::Schema,
-  data: Vec<SortedRecord<'a>>,
+  data: Vec<csv::StringRecord>,
 }
 
-impl<'a> Sorted<'a> {
-  pub fn new(source: &'a mut dyn Frame, sort: &select::Sort) -> Result<Sorted<'a>, error::Error> {
+impl Sorted {
+  pub fn new(source: &mut dyn Frame, sort: &select::Sort) -> Result<Sorted, error::Error> {
     let name = source.name().to_owned();
     let schema = source.schema().clone();
     let data = Self::sorted(&schema, sort, source)?;
@@ -280,49 +234,48 @@ impl<'a> Sorted<'a> {
     })
   }
   
-  fn sorted(schema: &schema::Schema, sort: &select::Sort, source: &mut dyn Frame) -> Result<Vec<SortedRecord<'a>>, error::Error> {
-    let indexes = match schema.indexes(&sort.columns()) {
-      Some(indexes) => indexes,
-      None => return Err(error::FrameError::new(&format!("Index columns not found: {:?} ({})", on, &schema)).into()),
+  fn sorted(schema: &schema::Schema, sort: &select::Sort, source: &mut dyn Frame) -> Result<Vec<csv::StringRecord>, error::Error> {
+    let sorting = match schema.sorting(sort) {
+      Some(sorting) => sorting,
+      None => return Err(error::FrameError::new(&format!("Index columns not found: {:?} ({})", sort, &schema)).into()),
     };
     
-    let mut data: Vec<SortedRecord<'a>> = Vec::new();
+    let mut data: Vec<csv::StringRecord> = Vec::new();
     for row in source.rows() {
-      let row = row?;
-      // let mut fields: Vec<SortedField<'a>> = Vec::new();
-      // for index in &indexes {
-      //   match row.get(*index) {
-      //     Some(col) => fields.push(SortedField::new(col)),
-      //     None => return Err(error::FrameError::new(&format!("Index column not found: {}", index)).into()),
-      //   };
-      // }
-      // data.push(SortedRecord{
-      //   on: fields,
-      //   data: row,
-      // });
-      data.push(SortedRecord::new(sort, &row));
+      data.push(row?);
     }
     
-    data.sort();
+    // let sortref = &sorting;
+    data.sort_by_key(|row| {
+      let mut key: Vec<Option<Field>> = Vec::new();
+      for (index, ord) in &sorting {
+        key.push(match row.get(*index) {
+          Some(field) => Some(Field::new(field, *ord)),
+          None => None,
+        });
+      }
+      key
+    });
+    
     Ok(data)
   }
 }
 
-impl<'a> Frame for Sorted<'a> {
-  fn name<'b>(&'b self) -> &'b str {
+impl Frame for Sorted {
+  fn name<'a>(&'a self) -> &'a str {
     &self.name
   }
   
-  fn schema<'b>(&'b self) -> &'b schema::Schema {
+  fn schema<'a>(&'a self) -> &'a schema::Schema {
     &self.schema
   }
   
-  fn rows<'b>(&'b mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'b> {
-    Box::new(self.data.iter().map(|e| { Ok(e.data.clone()) }))
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+    Box::new(self.data.iter().map(|e| { Ok(e.clone()) }))
   }
 }
 
-impl<'a> fmt::Display for Sorted<'a> {
+impl fmt::Display for Sorted {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}{{{:?}}}", self.name, &self.on)
   }
