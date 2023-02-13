@@ -9,16 +9,22 @@ use crate::csvql::query::error;
 // A data selector
 pub trait Selector: fmt::Display + fmt::Debug {
   fn select(&self, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error>;
+  fn schema<'a>(&'a self) -> &'a schema::Schema;
 }
 
 impl<S: Selector + ?Sized> Selector for Box<S> { // black magic
   fn select(&self, row: &csv::StringRecord) -> Result<csv::StringRecord, error::Error> {
     (**self).select(row)
   }
+  
+  fn schema<'a>(&'a self) -> &'a schema::Schema {
+    (**self).schema()
+  }
 }
 
 #[derive(Clone)]
 pub struct Columns {
+  schema: schema::Schema,
   names: Vec<schema::QName>,
   indexes: Vec<usize>,
 }
@@ -44,6 +50,7 @@ impl Columns {
       });
     }
     Ok(Columns{
+      schema: schema.clone(),
       names: names,
       indexes: indexes,
     })
@@ -60,6 +67,10 @@ impl Selector for Columns {
       });
     }
     Ok(sel.into())
+  }
+  
+  fn schema<'a>(&'a self) -> &'a schema::Schema {
+    &self.schema
   }
 }
 
