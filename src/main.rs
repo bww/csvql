@@ -13,6 +13,7 @@ use csvql::query::frame::Frame;
 use csvql::query::select;
 use csvql::query::select::Selector;
 use csvql::query::schema;
+use csvql::query::exec;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -46,6 +47,7 @@ fn main() {
 fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
   
+  let mut context = exec::Context::new();
   let mut frms: Vec<Box<dyn Frame>> = Vec::new();
   for s in &opts.docs {
     let (alias, path) = parse_source(&s);
@@ -54,7 +56,8 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       (alias, Box::new(fs::File::open(path)?))
     };
-    frms.push(Box::new(query::frame::Csv::new(&name, input)?));
+    // frms.push(Box::new(query::frame::Csv::new(&name, input)?));
+    context.add_source(alias, Box::new(query::frame::Csv::new(&name, input)?));
   }
   
   let frms = if let Some(on) = &opts.join {
