@@ -27,14 +27,10 @@ impl Context {
   }
 }
 
-pub trait Query<S: select::Selector, F: frame::Frame> {
-  
+pub struct Query<S: select::Selector, F: frame::Frame> {
+  select: S,
+  source: F,
 }
-
-// pub struct Query<S: select::Selector, F: frame::Frame> {
-//   select: S,
-//   source: F,
-// }
 
 // fn parse_query() -> Result<Query, error::Error> {
 //   parse_select()
