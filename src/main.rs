@@ -8,12 +8,12 @@ use std::process;
 use clap::Parser;
 
 use csvql::query;
+use csvql::query::exec;
 use csvql::query::frame;
 use csvql::query::frame::Frame;
 use csvql::query::select;
 use csvql::query::select::Selector;
 use csvql::query::schema;
-use csvql::query::exec;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -60,7 +60,15 @@ fn cmd() -> Result<(), error::Error> {
     context.set_source(alias, Box::new(query::frame::Csv::new(&name, input)?));
   }
   
+  let mut qry = exec::Query::new(context, "feedback", None, Vec::new());
+  let mut dst = csv::Writer::from_writer(io::stdout());
+  dst.write_record(qry.schema().record())?;
   
+  for row in qry.rows() {
+    dst.write_record(&row?)?;
+  }
+  
+  dst.flush()?;
   
   // let frms = if let Some(on) = &opts.join {
   //   let join = select::Join::parse(on)?;

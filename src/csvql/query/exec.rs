@@ -6,6 +6,7 @@ use nom;
 use nom::bytes::complete::{tag, take_while_m_n};
 
 use crate::csvql::query::frame;
+use crate::csvql::query::frame::Frame;
 use crate::csvql::query::schema;
 use crate::csvql::query::select;
 use crate::csvql::query::error;
@@ -21,8 +22,8 @@ impl Context {
     }
   }
   
-  pub fn source(&self, name: &str) -> Option<&Box<dyn frame::Frame>> {
-    self.sources.get(name)
+  pub fn source(&mut self, name: &str) -> Option<&mut Box<dyn frame::Frame>> {
+    self.sources.get_mut(name)
   }
   
   pub fn set_source(&mut self, name: &str, source: Box<dyn frame::Frame>) {
@@ -30,35 +31,105 @@ impl Context {
   }
 }
 
-pub struct Query<'a, S: select::Selector> {
-  context: &'a Context,
-  select: S,
+#[derive(Clone)]
+pub struct Join {
+  on: Vec<(schema::QName, select::Order)>,
 }
 
-impl<'a, S: select::Selector> Query<'a, S> {
-  pub fn new(context: &'a Context, select: S) -> Query<'a, S> {
+impl Join {
+  pub fn new(on: Vec<(schema::QName, select::Order)>) -> Join {
+    Join{
+      on: on,
+    }
+  }
+  
+  pub fn on(on: (schema::QName, select::Order)) -> Join {
+    Join{
+      on: vec![on],
+    }
+  }
+  
+  pub fn columns<'a>(&'a self) -> &'a Vec<(schema::QName, select::Order)> {
+    &self.on
+  }
+}
+
+impl fmt::Display for Join {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<{:?}>", &self.on)
+  }
+}
+
+impl fmt::Debug for Join {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<{:?}>", &self.on)
+  }
+}
+
+pub struct Query {
+  context: Context,
+  from: String,
+  join: Option<Join>,
+  select: Vec<schema::QName>,
+  schema: schema::Schema,
+}
+
+impl Query {
+  pub fn new(context: Context, from: &str, join: Option<Join>, select: Vec<schema::QName>) -> Query {
+    let schema = schema::Schema::new_with_keys(select.clone());
     Query{
       context: context,
+      from: from.to_owned(),
+      join: join,
       select: select,
+      schema: schema,
     }
   }
 }
 
-impl<'a, S: select::Selector> frame::Frame for Query<'a, S> {
-  fn name<'b>(&'b self) -> &'b str {
+impl frame::Frame for Query {
+  fn name<'a>(&'a self) -> &'a str {
     "query"
   }
   
-  fn schema<'b>(&'b self) -> &'b schema::Schema {
-    self.select.schema()
+  fn schema<'a>(&'a self) -> &'a schema::Schema {
+    &self.schema
   }
   
-  fn rows<'b>(&'b mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'b> {
-    Box::new(iter::once(Err(error::FrameError::new("Unimplemented").into())))
+  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+    let mut frm: &mut Box<dyn frame::Frame> = match self.context.source(&self.from) {
+      Some(frm) => frm,
+      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", &self.from)).into()))),
+    };
+    
+    if let Some(join) = &self.join {
+      for (on, sort) in join.columns() {
+        let scope = match on.scope() {
+          Some(scope) => scope,
+          None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Join defines no scope: {}", &on)).into()))),
+        };
+        let mut alt: &mut Box<dyn frame::Frame> = match self.context.source(scope) {
+          Some(alt) => alt,
+          None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", scope)).into()))),
+        };
+        let sorted = match frame::Sorted::new(alt, &select::Sort::on((on.clone(), sort.clone()))) {
+          Ok(sorted) => sorted,
+          Err(err) => return Box::new(iter::once(Err(err.into()))),
+        };
+        let joined = match frame::OuterJoin::new(frm, on, sorted, on) {
+          Ok(joined) => joined,
+          Err(err) => return Box::new(iter::once(Err(err.into()))),
+        };
+        frm = &mut Box::new(joined);
+      }
+    }
+    
+    // Box::new(iter::once(Err(error::FrameError::new("Unimplemented").into())))
+    Box::new(frm.rows())
   }
 }
 
-impl<'a, S: select::Selector> fmt::Display for Query<'a, S> {
+impl fmt::Display for Query {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.name())
   }

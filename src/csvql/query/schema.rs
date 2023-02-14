@@ -118,7 +118,7 @@ impl Schema {
     Self::new_with_keys(hdrs.map(|e| { QName::new(scope, e) }).collect())
   }
   
-  fn new_with_keys<'a>(keys: Vec<QName>) -> Schema {
+  pub fn new_with_keys(keys: Vec<QName>) -> Schema {
     let mut cmap: HashMap<QName, usize> = HashMap::new();
     for (i, k) in keys.iter().enumerate() {
       cmap.insert(k.clone(), i);
