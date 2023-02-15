@@ -22,8 +22,8 @@ impl Context {
     }
   }
   
-  pub fn source(&mut self, name: &str) -> Option<&mut Box<dyn frame::Frame>> {
-    self.sources.get_mut(name)
+  pub fn source(&mut self, name: &str) -> Option<Box<dyn frame::Frame>> {
+    self.sources.remove(name)
   }
   
   pub fn set_source(&mut self, name: &str, source: Box<dyn frame::Frame>) {
@@ -97,7 +97,7 @@ impl frame::Frame for Query {
   }
   
   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
-    let mut frm: &mut Box<dyn frame::Frame> = match self.context.source(&self.from) {
+    let mut frm: Box<dyn frame::Frame> = match self.context.source(&self.from) {
       Some(frm) => frm,
       None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", &self.from)).into()))),
     };
@@ -108,23 +108,22 @@ impl frame::Frame for Query {
           Some(scope) => scope,
           None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Join defines no scope: {}", &on)).into()))),
         };
-        let mut alt: &mut Box<dyn frame::Frame> = match self.context.source(scope) {
+        let mut alt: Box<dyn frame::Frame> = match self.context.source(scope) {
           Some(alt) => alt,
           None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", scope)).into()))),
         };
-        let sorted = match frame::Sorted::new(alt, &select::Sort::on((on.clone(), sort.clone()))) {
-          Ok(sorted) => sorted,
+        let sorted: Box<dyn frame::Frame> = match frame::Sorted::new(&mut alt, &select::Sort::on((on.clone(), sort.clone()))) {
+          Ok(sorted) => Box::new(sorted),
           Err(err) => return Box::new(iter::once(Err(err.into()))),
         };
-        let joined = match frame::OuterJoin::new(frm, on, sorted, on) {
-          Ok(joined) => joined,
+        let joined: Box<dyn frame::Frame> = match frame::OuterJoin::new(frm, on, sorted, on) {
+          Ok(joined) => Box::new(joined),
           Err(err) => return Box::new(iter::once(Err(err.into()))),
         };
-        frm = &mut Box::new(joined);
+        frm = Box::new(joined);
       }
     }
     
-    // Box::new(iter::once(Err(error::FrameError::new("Unimplemented").into())))
     Box::new(frm.rows())
   }
 }

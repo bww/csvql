@@ -38,20 +38,6 @@ impl<F: Frame + ?Sized> Frame for Box<F> { // black magic
   }
 }
 
-impl<'a, F: Frame + ?Sized> Frame for &'a mut Box<F> { // black magic
-  fn name<'b>(&'b self) -> &'b str {
-    (**self).name()
-  }
-  
-  fn schema<'b>(&'b self) -> &'b schema::Schema {
-    (**self).schema()
-  }
-  
-  fn rows<'b>(&'b mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'b> {
-    (**self).rows()
-  }
-}
-
 // A random-access frame indexed on a particular column
 pub trait Index: Frame {
   fn on<'a>(&'a self) -> &'a str; // the indexed column
