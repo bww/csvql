@@ -85,52 +85,88 @@ impl Query {
       schema: schema,
     }
   }
-}
-
-impl frame::Frame for Query {
-  fn name<'a>(&'a self) -> &'a str {
-    "query"
-  }
   
-  fn schema<'a>(&'a self) -> &'a schema::Schema {
-    &self.schema
-  }
-  
-  fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+  pub fn frame(&mut self) -> Result<Box<dyn frame::Frame>, error::Error> {
     let mut frm: Box<dyn frame::Frame> = match self.context.source(&self.from) {
       Some(frm) => frm,
-      None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", &self.from)).into()))),
+      None => return Err(error::FrameError::new(&format!("No such frame: {}", &self.from)).into()),
     };
     
     if let Some(join) = &self.join {
       for (on, sort) in join.columns() {
         let scope = match on.scope() {
           Some(scope) => scope,
-          None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Join defines no scope: {}", &on)).into()))),
+          None => return Err(error::FrameError::new(&format!("Join defines no scope: {}", &on)).into()),
         };
         let mut alt: Box<dyn frame::Frame> = match self.context.source(scope) {
           Some(alt) => alt,
-          None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", scope)).into()))),
+          None => return Err(error::FrameError::new(&format!("No such frame: {}", scope)).into()),
         };
         let sorted: Box<dyn frame::Frame> = match frame::Sorted::new(&mut alt, &select::Sort::on((on.clone(), sort.clone()))) {
           Ok(sorted) => Box::new(sorted),
-          Err(err) => return Box::new(iter::once(Err(err.into()))),
+          Err(err) => return Err(err.into()),
         };
         let joined: Box<dyn frame::Frame> = match frame::OuterJoin::new(frm, on, sorted, on) {
           Ok(joined) => Box::new(joined),
-          Err(err) => return Box::new(iter::once(Err(err.into()))),
+          Err(err) => return Err(err.into()),
         };
         frm = Box::new(joined);
       }
     }
     
-    Box::new(frm.rows())
+    Ok(frm)
+  }
+  
+  pub fn schema<'a>(&'a self) -> &'a schema::Schema {
+    &self.schema
   }
 }
 
+// impl frame::Frame for Query {
+//   fn name<'a>(&'a self) -> &'a str {
+//     "query"
+//   }
+  
+//   fn schema<'a>(&'a self) -> &'a schema::Schema {
+//     &self.schema
+//   }
+  
+//   fn rows<'a>(&'a mut self) -> Box<dyn iter::Iterator<Item = Result<csv::StringRecord, error::Error>> + 'a> {
+//     let mut frm: Box<dyn frame::Frame> = match self.context.source(&self.from) {
+//       Some(frm) => frm,
+//       None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", &self.from)).into()))),
+//     };
+    
+//     if let Some(join) = &self.join {
+//       for (on, sort) in join.columns() {
+//         let scope = match on.scope() {
+//           Some(scope) => scope,
+//           None => return Box::new(iter::once(Err(error::FrameError::new(&format!("Join defines no scope: {}", &on)).into()))),
+//         };
+//         let mut alt: Box<dyn frame::Frame> = match self.context.source(scope) {
+//           Some(alt) => alt,
+//           None => return Box::new(iter::once(Err(error::FrameError::new(&format!("No such frame: {}", scope)).into()))),
+//         };
+//         let sorted: Box<dyn frame::Frame> = match frame::Sorted::new(&mut alt, &select::Sort::on((on.clone(), sort.clone()))) {
+//           Ok(sorted) => Box::new(sorted),
+//           Err(err) => return Box::new(iter::once(Err(err.into()))),
+//         };
+//         let joined: Box<dyn frame::Frame> = match frame::OuterJoin::new(frm, on, sorted, on) {
+//           Ok(joined) => Box::new(joined),
+//           Err(err) => return Box::new(iter::once(Err(err.into()))),
+//         };
+//         frm = Box::new(joined);
+//       }
+//     }
+    
+//     frm.rows()
+//   }
+// }
+
 impl fmt::Display for Query {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}", self.name())
+    // write!(f, "{}", self.name())
+    write!(f, "query")
   }
 }
 

@@ -48,7 +48,6 @@ fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
   
   let mut context = exec::Context::new();
-  // let mut frms: Vec<Box<dyn Frame>> = Vec::new();
   for s in &opts.docs {
     let (alias, path) = parse_source(&s);
     let (name, input): (&str, Box<dyn io::Read>) = if path == "-" {
@@ -56,15 +55,17 @@ fn cmd() -> Result<(), error::Error> {
     }else{
       (alias, Box::new(fs::File::open(path)?))
     };
-    // frms.push(Box::new(query::frame::Csv::new(&name, input)?));
     context.set_source(alias, Box::new(query::frame::Csv::new(&name, input)?));
   }
   
-  let mut qry = exec::Query::new(context, "feedback", None, Vec::new());
+  let mut qry = exec::Query::new(context, "feedback", None, opts.select.iter().map(|e| { schema::QName::new_unscoped(e) }).collect());
   let mut dst = csv::Writer::from_writer(io::stdout());
   dst.write_record(qry.schema().record())?;
   
-  for row in qry.rows() {
+  let mut frm = qry.frame()?;
+  println!(">>> {}", frm);
+  
+  for row in frm.rows() {
     dst.write_record(&row?)?;
   }
   
